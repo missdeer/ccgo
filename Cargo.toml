@@ -1,0 +1,66 @@
+[package]
+name = "ccgo"
+version = "0.1.0"
+edition = "2021"
+authors = ["Claude Code Bridge Team"]
+description = "ClaudeCode-Codex-Gemini-OpenCode MCP Server - Multi-AI collaboration bridge"
+license = "MIT"
+repository = "https://github.com/missdeer/ccgo"
+keywords = ["mcp", "ai", "claude", "codex", "gemini"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+
+# MCP protocol
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# PTY management
+portable-pty = "0.8"
+
+# Web server
+axum = { version = "0.7", features = ["ws"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+rust-embed = { version = "8.5", features = ["axum"] }
+mime_guess = "2.0"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Utilities
+thiserror = "2.0"
+anyhow = "1.0"
+async-trait = "0.1"
+uuid = { version = "1.11", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.11"
+dirs = "5.0"
+notify = "7.0"
+parking_lot = "0.12"
+bytes = "1.9"
+futures = "0.3"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.14"
+
+[[bin]]
+name = "ccgo"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCGO - AI Bridge Console</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #16213e;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #0f3460;
+            flex-shrink: 0;
+        }
+        .header h1 {
+            font-size: 1.25rem;
+            color: #e94560;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .nav-link {
+            color: #aaa;
+            text-decoration: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .nav-link:hover {
+            background: #0f3460;
+            color: #fff;
+        }
+        .nav-link.active {
+            background: #e94560;
+            color: #fff;
+        }
+        .status-badge {
+            background: #0f3460;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        /* Grid mode (overview) */
+        .container-grid {
+            padding: 1rem;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            flex: 1;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        .agent-panel {
+            background: #16213e;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #0f3460;
+            display: flex;
+            flex-direction: column;
+        }
+        .agent-header {
+            padding: 0.5rem 1rem;
+            background: #0f3460;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .agent-name {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+        }
+        .agent-icon {
+            font-size: 1.1rem;
+        }
+        .agent-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+        }
+        .status-dot.running { background: #4ade80; }
+        .status-dot.stopped { background: #666; }
+        .status-dot.busy { background: #fbbf24; }
+        .status-dot.error { background: #f87171; }
+        .terminal-container {
+            flex: 1;
+            min-height: 250px;
+            padding: 0.25rem;
+        }
+        .agent-controls {
+            padding: 0.5rem;
+            background: #1a1a2e;
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+        .btn {
+            padding: 0.35rem 0.7rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.8; }
+        .btn-start { background: #4ade80; color: #000; }
+        .btn-stop { background: #f87171; color: #000; }
+        .btn-interrupt { background: #fbbf24; color: #000; }
+
+        /* Fullscreen mode (single agent) */
+        .container-full {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 0.5rem;
+        }
+        .container-full .agent-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .container-full .terminal-container {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 900px) {
+            .container-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>CCGO - AI Bridge Console</h1>
+        <div class="header-right">
+            <nav class="nav-links">
+                <a href="/" class="nav-link" data-nav="overview">Overview</a>
+                <a href="/codex" class="nav-link" data-nav="codex">Codex</a>
+                <a href="/gemini" class="nav-link" data-nav="gemini">Gemini</a>
+                <a href="/opencode" class="nav-link" data-nav="opencode">OpenCode</a>
+            </nav>
+            <div class="status-badge" id="global-status">Connecting...</div>
+        </div>
+    </header>
+
+    <!-- Overview mode: 2x2 grid -->
+    <div class="container-grid" id="overview-container">
+        <div class="agent-panel" data-agent="codex">
+            <div class="agent-header">
+                <div class="agent-name">
+                    <span class="agent-icon">🤖</span>
+                    <span>Codex</span>
+                </div>
+                <div class="agent-status">
+                    <span class="status-dot" id="codex-status-dot"></span>
+                    <span id="codex-status-text">STOPPED</span>
+                </div>
+            </div>
+            <div class="terminal-container" id="codex-terminal"></div>
+            <div class="agent-controls">
+                <button class="btn btn-start" onclick="startAgent('codex')">Start</button>
+                <button class="btn btn-stop" onclick="stopAgent('codex')">Stop</button>
+                <button class="btn btn-interrupt" onclick="interruptAgent('codex')">Interrupt</button>
+            </div>
+        </div>
+
+        <div class="agent-panel" data-agent="gemini">
+            <div class="agent-header">
+                <div class="agent-name">
+                    <span class="agent-icon">💎</span>
+                    <span>Gemini</span>
+                </div>
+                <div class="agent-status">
+                    <span class="status-dot" id="gemini-status-dot"></span>
+                    <span id="gemini-status-text">STOPPED</span>
+                </div>
+            </div>
+            <div class="terminal-container" id="gemini-terminal"></div>
+            <div class="agent-controls">
+                <button class="btn btn-start" onclick="startAgent('gemini')">Start</button>
+                <button class="btn btn-stop" onclick="stopAgent('gemini')">Stop</button>
+                <button class="btn btn-interrupt" onclick="interruptAgent('gemini')">Interrupt</button>
+            </div>
+        </div>
+
+        <div class="agent-panel" data-agent="opencode">
+            <div class="agent-header">
+                <div class="agent-name">
+                    <span class="agent-icon">🔷</span>
+                    <span>OpenCode</span>
+                </div>
+                <div class="agent-status">
+                    <span class="status-dot" id="opencode-status-dot"></span>
+                    <span id="opencode-status-text">STOPPED</span>
+                </div>
+            </div>
+            <div class="terminal-container" id="opencode-terminal"></div>
+            <div class="agent-controls">
+                <button class="btn btn-start" onclick="startAgent('opencode')">Start</button>
+                <button class="btn btn-stop" onclick="stopAgent('opencode')">Stop</button>
+                <button class="btn btn-interrupt" onclick="interruptAgent('opencode')">Interrupt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen mode: single agent -->
+    <div class="container-full hidden" id="fullscreen-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script>
+        const terminals = {};
+        const websockets = {};
+        const allAgents = ['codex', 'gemini', 'opencode'];
+        const agentIcons = { codex: '🤖', gemini: '💎', opencode: '🔷' };
+
+        // Determine current mode from URL
+        const path = window.location.pathname.replace(/^\//, '').toLowerCase();
+        const singleAgent = allAgents.includes(path) ? path : null;
+        const activeAgents = singleAgent ? [singleAgent] : allAgents;
+
+        function initTerminal(agent, container) {
+            const term = new Terminal({
+                theme: {
+                    background: '#1a1a2e',
+                    foreground: '#eee',
+                    cursor: '#e94560'
+                },
+                fontSize: 14,
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                cursorBlink: true
+            });
+
+            const fitAddon = new FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+            term.open(container);
+
+            // Delay fit to ensure container has size
+            requestAnimationFrame(() => {
+                fitAddon.fit();
+            });
+
+            terminals[agent] = { term, fitAddon };
+
+            // Handle input
+            term.onData(data => {
+                if (websockets[agent] && websockets[agent].readyState === WebSocket.OPEN) {
+                    websockets[agent].send(data);
+                }
+            });
+
+            return { term, fitAddon };
+        }
+
+        function connectWebSocket(agent) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws/${agent}`);
+
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                console.log(`WebSocket connected for ${agent}`);
+            };
+
+            ws.onmessage = (event) => {
+                if (terminals[agent]) {
+                    const data = event.data instanceof ArrayBuffer
+                        ? new TextDecoder().decode(event.data)
+                        : event.data;
+                    terminals[agent].term.write(data);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log(`WebSocket closed for ${agent}`);
+                setTimeout(() => connectWebSocket(agent), 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error(`WebSocket error for ${agent}:`, err);
+            };
+
+            websockets[agent] = ws;
+        }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                let onlineCount = 0;
+                data.agents.forEach(agent => {
+                    updateAgentStatus(agent.name, agent.state);
+                    if (agent.state !== 'STOPPED' && agent.state !== 'DEAD') {
+                        onlineCount++;
+                    }
+                });
+
+                document.getElementById('global-status').textContent = `${onlineCount} Online`;
+            } catch (err) {
+                console.error('Failed to fetch status:', err);
+                document.getElementById('global-status').textContent = 'Disconnected';
+            }
+        }
+
+        function updateAgentStatus(agent, state) {
+            const dot = document.getElementById(`${agent}-status-dot`);
+            const text = document.getElementById(`${agent}-status-text`);
+
+            if (!dot || !text) return;
+
+            text.textContent = state;
+            dot.className = 'status-dot';
+
+            switch (state) {
+                case 'IDLE':
+                case 'READY_TIMEOUT':
+                    dot.classList.add('running');
+                    break;
+                case 'BUSY':
+                case 'STARTING':
+                    dot.classList.add('busy');
+                    break;
+                case 'STUCK':
+                case 'DEAD':
+                    dot.classList.add('error');
+                    break;
+                default:
+                    dot.classList.add('stopped');
+            }
+        }
+
+        async function startAgent(agent) {
+            try {
+                await fetch(`/api/agents/${agent}/start`, { method: 'POST' });
+                fetchStatus();
+            } catch (err) {
+                console.error(`Failed to start ${agent}:`, err);
+            }
+        }
+
+        async function stopAgent(agent) {
+            try {
+                await fetch(`/api/agents/${agent}/stop`, { method: 'POST' });
+                fetchStatus();
+            } catch (err) {
+                console.error(`Failed to stop ${agent}:`, err);
+            }
+        }
+
+        async function interruptAgent(agent) {
+            try {
+                await fetch(`/api/agents/${agent}/interrupt`, { method: 'POST' });
+                fetchStatus();
+            } catch (err) {
+                console.error(`Failed to interrupt ${agent}:`, err);
+            }
+        }
+
+        function setupFullscreenMode(agent) {
+            document.getElementById('overview-container').classList.add('hidden');
+            const fullContainer = document.getElementById('fullscreen-container');
+            fullContainer.classList.remove('hidden');
+
+            // Create fullscreen panel
+            fullContainer.innerHTML = `
+                <div class="agent-panel" data-agent="${agent}">
+                    <div class="agent-header">
+                        <div class="agent-name">
+                            <span class="agent-icon">${agentIcons[agent]}</span>
+                            <span>${agent.charAt(0).toUpperCase() + agent.slice(1)}</span>
+                        </div>
+                        <div class="agent-status">
+                            <span class="status-dot" id="${agent}-status-dot"></span>
+                            <span id="${agent}-status-text">STOPPED</span>
+                        </div>
+                    </div>
+                    <div class="terminal-container" id="${agent}-terminal"></div>
+                    <div class="agent-controls">
+                        <button class="btn btn-start" onclick="startAgent('${agent}')">Start</button>
+                        <button class="btn btn-stop" onclick="stopAgent('${agent}')">Stop</button>
+                        <button class="btn btn-interrupt" onclick="interruptAgent('${agent}')">Interrupt</button>
+                    </div>
+                </div>
+            `;
+
+            // Update title
+            document.title = `CCGO - ${agent.charAt(0).toUpperCase() + agent.slice(1)}`;
+        }
+
+        function updateNavLinks() {
+            document.querySelectorAll('.nav-link').forEach(link => {
+                const nav = link.dataset.nav;
+                if ((nav === 'overview' && !singleAgent) || nav === singleAgent) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        // Initialize
+        function init() {
+            updateNavLinks();
+
+            if (singleAgent) {
+                setupFullscreenMode(singleAgent);
+            }
+
+            activeAgents.forEach(agent => {
+                const container = document.getElementById(`${agent}-terminal`);
+                if (container) {
+                    initTerminal(agent, container);
+                    connectWebSocket(agent);
+                }
+            });
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                Object.values(terminals).forEach(({ fitAddon }) => {
+                    fitAddon.fit();
+                });
+            });
+
+            fetchStatus();
+            setInterval(fetchStatus, 5000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

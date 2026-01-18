@@ -1,0 +1,43 @@
+{
+  "name": "ccgo",
+  "version": "0.1.0",
+  "description": "MCP server for multi-AI collaboration - orchestrate Codex, Gemini, and OpenCode from Claude Code",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/missdeer/ccgo.git"
+  },
+  "author": "Claude Code Bridge Team",
+  "license": "GPL-3.0-only",
+  "bugs": {
+    "url": "https://github.com/missdeer/ccgo/issues"
+  },
+  "homepage": "https://github.com/missdeer/ccgo#readme",
+  "keywords": [
+    "mcp",
+    "claude",
+    "codex",
+    "gemini",
+    "opencode",
+    "ai",
+    "multi-agent",
+    "cli"
+  ],
+  "bin": {
+    "ccgo": "run.js"
+  },
+  "files": [
+    "run.js"
+  ],
+  "engines": {
+    "node": ">=14.14.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
