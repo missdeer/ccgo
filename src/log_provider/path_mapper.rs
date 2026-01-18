@@ -1,5 +1,7 @@
 //! Cross-platform path mapper
 
+#[cfg(target_os = "linux")]
+use std::path::Path;
 use std::path::PathBuf;
 
 pub struct PathMapper;
