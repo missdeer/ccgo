@@ -85,15 +85,33 @@ ccgo [选项] [命令]
 
 CCGO 提供一个 MCP 工具：
 
-### `ask_agent`
+### `ask_agents`
 
-向 AI Agent 发送消息并等待响应。如果 Agent 未运行，会自动启动。
+向 AI Agent 并行发送消息并等待响应。如果 Agent 未运行，会自动启动。
 
 ```json
 {
-  "agent_name": "codex",
-  "message": "解释这段代码",
+  "requests": [
+    {"agent": "codex", "message": "审查这段代码"},
+    {"agent": "gemini", "message": "提出改进建议"}
+  ],
   "timeout": 300
+}
+```
+
+**参数：**
+- `requests`：1-4 个 Agent 请求的数组
+  - `agent`："codex" | "gemini" | "opencode" | "claudecode"
+  - `message`：要发送的提示
+- `timeout`：可选，超时秒数（默认：600，最大：1800）
+
+**响应：**
+```json
+{
+  "results": [
+    {"agent": "codex", "success": true, "response": "..."},
+    {"agent": "gemini", "success": true, "response": "..."}
+  ]
 }
 ```
 

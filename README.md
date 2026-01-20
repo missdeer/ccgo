@@ -85,15 +85,33 @@ Options:
 
 CCGO exposes a single MCP tool:
 
-### `ask_agent`
+### `ask_agents`
 
-Send a message to an AI agent and wait for response. Agent is auto-started if not running.
+Send messages to AI agents in parallel and wait for responses. Agents are auto-started if not running.
 
 ```json
 {
-  "agent_name": "codex",
-  "message": "Explain this code",
+  "requests": [
+    {"agent": "codex", "message": "Review this code"},
+    {"agent": "gemini", "message": "Suggest improvements"}
+  ],
   "timeout": 300
+}
+```
+
+**Parameters:**
+- `requests`: Array of 1-4 agent requests
+  - `agent`: "codex" | "gemini" | "opencode" | "claudecode"
+  - `message`: Prompt to send
+- `timeout`: Optional seconds (default: 600, max: 1800)
+
+**Response:**
+```json
+{
+  "results": [
+    {"agent": "codex", "success": true, "response": "..."},
+    {"agent": "gemini", "success": true, "response": "..."}
+  ]
 }
 ```
 
