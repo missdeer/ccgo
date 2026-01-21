@@ -13,6 +13,7 @@ pub struct AgentStatus {
 #[derive(Debug, Serialize)]
 pub struct StatusResponse {
     pub agents: Vec<AgentStatus>,
+    pub input_enabled: bool,
 }
 
 pub async fn api_get_status(
@@ -28,5 +29,8 @@ pub async fn api_get_status(
         })
         .collect();
 
-    Ok(Json(StatusResponse { agents }))
+    Ok(Json(StatusResponse {
+        agents,
+        input_enabled: state.config.web.input_enabled,
+    }))
 }

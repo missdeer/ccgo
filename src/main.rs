@@ -370,10 +370,14 @@ async fn create_session_manager(config: &Config) -> anyhow::Result<Arc<SessionMa
     }
 
     // Pre-start all agents in background (non-blocking)
+    // Use tokio::task::yield_now to ensure the spawn gets a chance to start
     let sm = session_manager.clone();
     tokio::spawn(async move {
         sm.start_all().await;
     });
+
+    // Yield to allow the spawned task to start executing
+    tokio::task::yield_now().await;
 
     Ok(session_manager)
 }
