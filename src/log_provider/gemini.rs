@@ -23,6 +23,10 @@ use tokio::sync::Mutex;
 struct LockedGeminiSession {
     path: PathBuf,
     baseline_timestamp: DateTime<Utc>,
+    // Cache fields to avoid re-parsing unchanged files
+    last_modified: SystemTime,
+    last_size: u64,
+    cached_entries: Arc<Vec<(String, String, DateTime<Utc>)>>,
 }
 
 pub struct GeminiLogProvider {
@@ -209,6 +213,77 @@ impl GeminiLogProvider {
         Ok(content)
     }
 
+    fn read_file_to_string_with_metadata(
+        path: &Path,
+    ) -> std::io::Result<(String, Option<(SystemTime, u64)>)> {
+        let file = File::open(path)?;
+        let metadata = file.metadata().ok().and_then(|m| {
+            let modified = m.modified().ok()?;
+            Some((modified, m.len()))
+        });
+
+        let mut reader = BufReader::new(file);
+        let mut content = String::new();
+        reader.read_to_string(&mut content)?;
+        Ok((content, metadata))
+    }
+
+    /// Get file metadata (mtime, size) for cache invalidation check.
+    /// Returns None if file doesn't exist or metadata unavailable.
+    fn get_file_metadata(path: &Path) -> Option<(SystemTime, u64)> {
+        let metadata = fs::metadata(path).ok()?;
+        let modified = metadata.modified().ok()?;
+        let size = metadata.len();
+        Some((modified, size))
+    }
+
+    /// Check if cached entries are still valid by comparing file metadata.
+    /// Returns true if cache is valid (file unchanged), false if re-parse needed.
+    fn is_cache_valid(
+        cached_mtime: SystemTime,
+        cached_size: u64,
+        current_mtime: SystemTime,
+        current_size: u64,
+    ) -> bool {
+        cached_mtime == current_mtime && cached_size == current_size
+    }
+
+    /// Parse file and update the locked session cache.
+    /// Returns the parsed entries.
+    async fn parse_and_update_cache(
+        &self,
+        path: &PathBuf,
+    ) -> Arc<Vec<(String, String, DateTime<Utc>)>> {
+        let (content, metadata) = match Self::read_file_to_string_with_metadata(path) {
+            Ok((c, m)) => (c, m),
+            Err(e) => {
+                tracing::warn!("[GeminiLogProvider] Failed to read file {:?}: {}", path, e);
+                return Arc::new(Vec::new());
+            }
+        };
+
+        let entries = Arc::new(self.parse_chat_json(&content));
+
+        // Update cache in locked session if path matches
+        if let Some((mtime, size)) = metadata {
+            let mut locked = self.locked_session.lock().await;
+            if let Some(ref mut session) = *locked {
+                if session.path == *path {
+                    session.last_modified = mtime;
+                    session.last_size = size;
+                    session.cached_entries = entries.clone();
+                    tracing::debug!(
+                        "[GeminiLogProvider] Cache updated: {} entries, size={}",
+                        entries.len(),
+                        size
+                    );
+                }
+            }
+        }
+
+        entries
+    }
+
     fn find_assistant_reply(
         &self,
         entries: &[(String, String, DateTime<Utc>)],
@@ -323,19 +398,28 @@ impl LogProvider for GeminiLogProvider {
         let default_timestamp = Self::default_timestamp();
 
         // Use locked session file if available, otherwise find latest
-        let (chat_file, baseline_timestamp, should_check_newer) = {
+        let (chat_file, baseline_timestamp, should_check_newer, cached_data) = {
             let locked = self.locked_session.lock().await.clone();
             if let Some(ref locked) = locked {
                 tracing::debug!(
                     "[GeminiLogProvider] Using locked session file: {:?}",
                     locked.path
                 );
-                (locked.path.clone(), locked.baseline_timestamp, true)
+                (
+                    locked.path.clone(),
+                    locked.baseline_timestamp,
+                    true,
+                    Some((
+                        locked.last_modified,
+                        locked.last_size,
+                        locked.cached_entries.clone(),
+                    )),
+                )
             } else {
                 match self.find_latest_chat_file() {
                     Some(f) => {
                         tracing::debug!("[GeminiLogProvider] Found latest chat file: {:?}", f);
-                        (f, default_timestamp, false)
+                        (f, default_timestamp, false, None)
                     }
                     None => {
                         tracing::debug!("[GeminiLogProvider] No chat file found");
@@ -345,32 +429,47 @@ impl LogProvider for GeminiLogProvider {
             }
         };
 
-        // Try to find reply in current/locked session
-        if let Ok(content) = Self::read_file_to_string(&chat_file) {
-            let entries = self.parse_chat_json(&content);
-            let total_messages = entries.len() as u64;
+        // Get current file metadata for cache validation
+        let current_metadata = Self::get_file_metadata(&chat_file);
 
-            tracing::debug!(
-                "[GeminiLogProvider] Parsed {} messages from {:?}, since_offset={}",
-                total_messages,
-                chat_file,
-                since_offset
-            );
-
-            if let Some(result) = self.find_assistant_reply(&entries, since_offset) {
-                self.current_offset.store(total_messages, Ordering::SeqCst);
-                tracing::info!(
-                    "[GeminiLogProvider] Found assistant reply, new offset={}",
-                    total_messages
+        // Try to use cached entries if file unchanged (O(1) syscall instead of full parse)
+        let entries = if let (
+            Some((cached_mtime, cached_size, ref cached_entries)),
+            Some((current_mtime, current_size)),
+        ) = (&cached_data, current_metadata)
+        {
+            if Self::is_cache_valid(*cached_mtime, *cached_size, current_mtime, current_size) {
+                tracing::debug!(
+                    "[GeminiLogProvider] Cache hit - file unchanged, using {} cached entries",
+                    cached_entries.len()
                 );
-                return Some(result);
+                cached_entries.clone()
+            } else {
+                tracing::debug!("[GeminiLogProvider] Cache miss - file changed, re-parsing");
+                self.parse_and_update_cache(&chat_file).await
             }
-        } else if !should_check_newer {
-            tracing::warn!(
-                "[GeminiLogProvider] Failed to read chat file {:?}, no fallback available",
-                chat_file
+        } else {
+            // No cache available, parse file
+            tracing::debug!("[GeminiLogProvider] No cache available, parsing file");
+            self.parse_and_update_cache(&chat_file).await
+        };
+
+        let total_messages = entries.len() as u64;
+
+        tracing::debug!(
+            "[GeminiLogProvider] Using {} messages from {:?}, since_offset={}",
+            total_messages,
+            chat_file,
+            since_offset
+        );
+
+        if let Some(result) = self.find_assistant_reply(entries.as_slice(), since_offset) {
+            self.current_offset.store(total_messages, Ordering::SeqCst);
+            tracing::info!(
+                "[GeminiLogProvider] Found assistant reply, new offset={}",
+                total_messages
             );
-            return None;
+            return Some(result);
         }
 
         // Fallback: check newer session file if we were using a locked session
@@ -462,7 +561,7 @@ impl LogProvider for GeminiLogProvider {
 
     async fn lock_session(&self) -> Option<LockedSession> {
         let chat_file = self.find_latest_chat_file()?;
-        let content = fs::read_to_string(&chat_file).ok()?;
+        let (content, metadata) = Self::read_file_to_string_with_metadata(&chat_file).ok()?;
         let entries = self.parse_chat_json(&content);
         let baseline_offset = entries.len() as u64;
         let default_timestamp = Self::default_timestamp();
@@ -473,16 +572,23 @@ impl LogProvider for GeminiLogProvider {
             .find(|ts| *ts != default_timestamp)
             .unwrap_or(default_timestamp);
 
-        // Store locked session
+        let cached_entries = Arc::new(entries);
+        let (last_modified, last_size) = metadata.unwrap_or((SystemTime::UNIX_EPOCH, 0));
+
+        // Store locked session with cache
         *self.locked_session.lock().await = Some(LockedGeminiSession {
             path: chat_file.clone(),
             baseline_timestamp,
+            last_modified,
+            last_size,
+            cached_entries,
         });
 
         tracing::info!(
-            "[GeminiLogProvider] Session locked: {:?}, baseline_offset={}",
+            "[GeminiLogProvider] Session locked: {:?}, baseline_offset={}, cached_size={}",
             chat_file,
-            baseline_offset
+            baseline_offset,
+            last_size
         );
 
         Some(LockedSession {
