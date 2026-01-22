@@ -71,12 +71,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, agent_name: String) {
         drop(pty_guard);
 
         // Send waiting message to client
-        let _ = sender
+        if sender
             .send(Message::Text(format!(
                 "\x1b[33mWaiting for agent {} to start...\x1b[0m\r\n",
                 agent_name
             )))
-            .await;
+            .await
+            .is_err()
+        {
+            return;
+        }
 
         // Wait before checking again
         tokio::time::sleep(Duration::from_millis(PTY_POLL_INTERVAL_MS)).await;
@@ -92,24 +96,28 @@ async fn handle_socket(socket: WebSocket, state: AppState, agent_name: String) {
     let output_rx = pty.subscribe_output();
 
     // Spawn task to forward PTY output to WebSocket
-    let send_task = spawn_send_task(sender, output_rx);
+    let mut send_task = spawn_send_task(sender, output_rx);
 
     // Handle incoming messages using a channel to avoid Send issues
     let input_enabled = state.config.web.input_enabled;
     let (input_tx, input_rx) = mpsc::channel::<PtyMessage>(32);
 
     // Task to process input and control commands
-    let input_task = spawn_input_task(session.clone(), input_rx);
+    let mut input_task = spawn_input_task(session.clone(), input_rx);
 
     // Task to receive WebSocket messages
-    let recv_task = spawn_recv_task(receiver, input_tx, input_enabled);
+    let mut recv_task = spawn_recv_task(receiver, input_tx, input_enabled);
 
     // Wait for either task to complete
     tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
-        _ = input_task => {},
+        _ = &mut send_task => {},
+        _ = &mut recv_task => {},
+        _ = &mut input_task => {},
     }
+
+    send_task.abort();
+    recv_task.abort();
+    input_task.abort();
 }
 
 fn spawn_send_task(
@@ -117,9 +125,18 @@ fn spawn_send_task(
     mut output_rx: broadcast::Receiver<Vec<u8>>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        while let Ok(data) = output_rx.recv().await {
-            if sender.send(Message::Binary(data)).await.is_err() {
-                break;
+        loop {
+            match output_rx.recv().await {
+                Ok(data) => {
+                    if sender.send(Message::Binary(data)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    warn!("WebSocket output lagged by {} messages", n);
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
             }
         }
     })

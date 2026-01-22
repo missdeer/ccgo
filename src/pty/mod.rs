@@ -12,15 +12,27 @@ use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 const DEFAULT_COLS: u16 = 120;
 const DEFAULT_ROWS: u16 = 40;
 
+const TERMINAL_QUERY_TAIL_BYTES: usize = 3;
+
+fn query_sequence_present(data: &[u8], prefix_len: usize, needle: &[u8]) -> bool {
+    data.windows(needle.len())
+        .enumerate()
+        .any(|(idx, w)| w == needle && idx + needle.len() > prefix_len)
+}
+
 /// Handle terminal query sequences by sending appropriate responses.
 /// This is needed because macOS native PTY doesn't automatically respond to
 /// terminal queries like Windows ConPTY does.
-fn handle_terminal_queries(data: &[u8], writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn handle_terminal_queries(
+    data: &[u8],
+    prefix_len: usize,
+    writer: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
     // Search for terminal query sequences in the raw bytes
     // We need to respond immediately to avoid timeouts
 
     // Check for Cursor Position Report (CPR) query: ESC[6n
-    if data.windows(4).any(|w| w == b"\x1b[6n") {
+    if query_sequence_present(data, prefix_len, b"\x1b[6n") {
         // Respond with cursor at position 1,1: ESC[1;1R
         writer.write_all(b"\x1b[1;1R")?;
         writer.flush()?;
@@ -28,7 +40,7 @@ fn handle_terminal_queries(data: &[u8], writer: &mut dyn std::io::Write) -> std:
     }
 
     // Check for Device Status Report (DSR) query: ESC[5n
-    if data.windows(4).any(|w| w == b"\x1b[5n") {
+    if query_sequence_present(data, prefix_len, b"\x1b[5n") {
         // Respond with "terminal is OK": ESC[0n
         writer.write_all(b"\x1b[0n")?;
         writer.flush()?;
@@ -36,7 +48,7 @@ fn handle_terminal_queries(data: &[u8], writer: &mut dyn std::io::Write) -> std:
     }
 
     // Check for Primary Device Attributes (DA) query: ESC[c
-    if data.windows(3).any(|w| w == b"\x1b[c") {
+    if query_sequence_present(data, prefix_len, b"\x1b[c") {
         // Respond as VT100: ESC[?1;0c
         writer.write_all(b"\x1b[?1;0c")?;
         writer.flush()?;
@@ -304,6 +316,7 @@ impl PtyHandle {
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut query_tail: Vec<u8> = Vec::new();
             loop {
                 if shutdown_reader.load(Ordering::SeqCst) {
                     break;
@@ -316,8 +329,19 @@ impl PtyHandle {
                         // Check for terminal query sequences and respond automatically
                         // This must happen BEFORE broadcasting to avoid race conditions
                         {
+                            let mut scan = Vec::with_capacity(query_tail.len() + data.len());
+                            scan.extend_from_slice(&query_tail);
+                            scan.extend_from_slice(&data);
+
                             let mut w = writer_for_queries.lock().unwrap();
-                            let _ = handle_terminal_queries(&data, &mut *w);
+                            let _ = handle_terminal_queries(&scan, query_tail.len(), &mut *w);
+
+                            if scan.len() <= TERMINAL_QUERY_TAIL_BYTES {
+                                query_tail = scan;
+                            } else {
+                                query_tail =
+                                    scan[scan.len() - TERMINAL_QUERY_TAIL_BYTES..].to_vec();
+                            }
                         }
 
                         // Broadcast to WebSocket subscribers

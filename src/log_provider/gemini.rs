@@ -13,15 +13,22 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::Mutex;
+
+#[derive(Clone)]
+struct LockedGeminiSession {
+    path: PathBuf,
+    baseline_timestamp: DateTime<Utc>,
+}
 
 pub struct GeminiLogProvider {
     log_path: PathBuf,
     current_offset: Arc<AtomicU64>,
-    locked_session: Arc<Mutex<Option<PathBuf>>>,
+    locked_session: Arc<Mutex<Option<LockedGeminiSession>>>,
 }
 
 impl GeminiLogProvider {
@@ -46,6 +53,10 @@ impl GeminiLogProvider {
             current_offset: Arc::new(AtomicU64::new(0)),
             locked_session: Arc::new(Mutex::new(None)),
         }
+    }
+
+    fn default_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from(SystemTime::UNIX_EPOCH)
     }
 
     fn default_log_path() -> PathBuf {
@@ -96,7 +107,10 @@ impl GeminiLogProvider {
 
             project_count += 1;
 
-            for chat_entry in fs::read_dir(&chats_dir).ok()?.filter_map(|e| e.ok()) {
+            let Ok(chat_entries) = fs::read_dir(&chats_dir) else {
+                continue;
+            };
+            for chat_entry in chat_entries.filter_map(|e| e.ok()) {
                 let path = chat_entry.path();
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string());
 
@@ -129,6 +143,34 @@ impl GeminiLogProvider {
         latest_file
     }
 
+    fn scan_latest_session_file_in_chats_dir(chats_dir: &Path) -> Option<PathBuf> {
+        let mut latest_file: Option<PathBuf> = None;
+        let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+
+        let entries = fs::read_dir(chats_dir).ok()?;
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            let name = path.file_name().map(|n| n.to_string_lossy().to_string());
+
+            if let Some(ref n) = name {
+                if !n.starts_with("session-") || !n.ends_with(".json") {
+                    continue;
+                }
+            }
+
+            if let Ok(metadata) = path.metadata() {
+                if let Ok(modified) = metadata.modified() {
+                    if modified > latest_time {
+                        latest_time = modified;
+                        latest_file = Some(path);
+                    }
+                }
+            }
+        }
+
+        latest_file
+    }
+
     fn parse_chat_json(&self, content: &str) -> Vec<(String, String, DateTime<Utc>)> {
         let Ok(json) = serde_json::from_str::<serde_json::Value>(content) else {
             return Vec::new();
@@ -149,10 +191,124 @@ impl GeminiLogProvider {
                     .and_then(|t| t.as_str())
                     .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
                     .map(|t| t.with_timezone(&Utc))
-                    .unwrap_or_else(Utc::now);
+                    .unwrap_or_else(Self::default_timestamp);
                 Some((role, content, timestamp))
             })
             .collect()
+    }
+
+    fn is_assistant_role(role: &str) -> bool {
+        role == "assistant" || role == "model" || role == "gemini"
+    }
+
+    fn read_file_to_string(path: &PathBuf) -> std::io::Result<String> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        let mut content = String::new();
+        reader.read_to_string(&mut content)?;
+        Ok(content)
+    }
+
+    fn find_assistant_reply(
+        &self,
+        entries: &[(String, String, DateTime<Utc>)],
+        since_offset: u64,
+    ) -> Option<LogEntry> {
+        // On 32-bit systems, u64 may overflow usize. Using MAX ensures .min() clamps
+        // to array length, resulting in an empty slice (no matches) - correct behavior.
+        let start = usize::try_from(since_offset)
+            .unwrap_or(usize::MAX)
+            .min(entries.len());
+
+        // Use slice for O(1) offset instead of O(N) skip
+        entries[start..]
+            .iter()
+            .enumerate()
+            .rfind(|(_, (role, content, _))| {
+                Self::is_assistant_role(role) && !content.trim().is_empty()
+            })
+            .map(|(local_idx, (_, content, timestamp))| LogEntry {
+                content: content.clone(),
+                offset: (start + local_idx) as u64 + 1,
+                timestamp: *timestamp,
+                inode: self.get_inode(),
+            })
+    }
+
+    fn find_assistant_reply_by_timestamp(
+        &self,
+        entries: &[(String, String, DateTime<Utc>)],
+        baseline_timestamp: DateTime<Utc>,
+    ) -> Option<LogEntry> {
+        entries
+            .iter()
+            .enumerate()
+            .rfind(|(_, (role, content, timestamp))| {
+                Self::is_assistant_role(role)
+                    && *timestamp > baseline_timestamp
+                    && !content.trim().is_empty()
+            })
+            .map(|(idx, (_, content, timestamp))| LogEntry {
+                content: content.clone(),
+                offset: idx as u64 + 1,
+                timestamp: *timestamp,
+                inode: self.get_inode(),
+            })
+    }
+
+    fn scan_newer_session(
+        &self,
+        locked_file: &PathBuf,
+        since_offset: u64,
+        baseline_timestamp: DateTime<Utc>,
+        default_timestamp: DateTime<Utc>,
+    ) -> Option<(LogEntry, u64)> {
+        let chats_dir = locked_file.parent()?;
+        let latest_file = Self::scan_latest_session_file_in_chats_dir(chats_dir)?;
+
+        if latest_file == *locked_file {
+            return None;
+        }
+
+        tracing::info!(
+            "[GeminiLogProvider] Found newer session file: {:?}, switching to it",
+            latest_file
+        );
+
+        let content = match Self::read_file_to_string(&latest_file) {
+            Ok(c) => c,
+            Err(_) => {
+                tracing::warn!(
+                    "[GeminiLogProvider] Failed to read newer chat file: {:?}",
+                    latest_file
+                );
+                return None;
+            }
+        };
+
+        let entries = self.parse_chat_json(&content);
+        let total_messages = entries.len() as u64;
+
+        tracing::debug!(
+            "[GeminiLogProvider] Parsed {} messages from newer file",
+            total_messages
+        );
+
+        // First try offset-based search
+        if let Some(entry) = self.find_assistant_reply(&entries, since_offset) {
+            return Some((entry, total_messages));
+        }
+
+        // Fall back to timestamp-based search if baseline is valid
+        if baseline_timestamp != default_timestamp {
+            if let Some(entry) =
+                self.find_assistant_reply_by_timestamp(&entries, baseline_timestamp)
+            {
+                return Some((entry, total_messages));
+            }
+        }
+
+        None
     }
 }
 
@@ -164,18 +320,22 @@ impl LogProvider for GeminiLogProvider {
             since_offset
         );
 
+        let default_timestamp = Self::default_timestamp();
+
         // Use locked session file if available, otherwise find latest
-        let (chat_file, should_check_newer) = {
-            let locked = self.locked_session.lock().await;
-            if let Some(ref path) = *locked {
-                tracing::debug!("[GeminiLogProvider] Using locked session file: {:?}", path);
-                (path.clone(), true) // Mark that we should check for newer files as fallback
+        let (chat_file, baseline_timestamp, should_check_newer) = {
+            let locked = self.locked_session.lock().await.clone();
+            if let Some(ref locked) = locked {
+                tracing::debug!(
+                    "[GeminiLogProvider] Using locked session file: {:?}",
+                    locked.path
+                );
+                (locked.path.clone(), locked.baseline_timestamp, true)
             } else {
-                drop(locked);
                 match self.find_latest_chat_file() {
                     Some(f) => {
                         tracing::debug!("[GeminiLogProvider] Found latest chat file: {:?}", f);
-                        (f, false)
+                        (f, default_timestamp, false)
                     }
                     None => {
                         tracing::debug!("[GeminiLogProvider] No chat file found");
@@ -185,128 +345,52 @@ impl LogProvider for GeminiLogProvider {
             }
         };
 
-        let file = match File::open(&chat_file) {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::warn!(
-                    "[GeminiLogProvider] Failed to open chat file {:?}: {}",
-                    chat_file,
-                    e
-                );
-                return None;
-            }
-        };
+        // Try to find reply in current/locked session
+        if let Ok(content) = Self::read_file_to_string(&chat_file) {
+            let entries = self.parse_chat_json(&content);
+            let total_messages = entries.len() as u64;
 
-        let mut reader = BufReader::new(file);
-        let mut content = String::new();
-        if let Err(e) = reader.read_to_string(&mut content) {
-            tracing::warn!(
-                "[GeminiLogProvider] Failed to read chat file {:?}: {}",
+            tracing::debug!(
+                "[GeminiLogProvider] Parsed {} messages from {:?}, since_offset={}",
+                total_messages,
                 chat_file,
-                e
+                since_offset
+            );
+
+            if let Some(result) = self.find_assistant_reply(&entries, since_offset) {
+                self.current_offset.store(total_messages, Ordering::SeqCst);
+                tracing::info!(
+                    "[GeminiLogProvider] Found assistant reply, new offset={}",
+                    total_messages
+                );
+                return Some(result);
+            }
+        } else if !should_check_newer {
+            tracing::warn!(
+                "[GeminiLogProvider] Failed to read chat file {:?}, no fallback available",
+                chat_file
             );
             return None;
         }
 
-        let entries = self.parse_chat_json(&content);
-        let total_messages = entries.len() as u64;
-
-        tracing::debug!(
-            "[GeminiLogProvider] Parsed {} messages from {:?}, since_offset={}",
-            total_messages,
-            chat_file,
-            since_offset
-        );
-
-        // Only consider messages after since_offset (message index)
-        let new_entries: Vec<_> = entries
-            .into_iter()
-            .enumerate()
-            .filter(|(idx, _)| *idx as u64 >= since_offset)
-            .collect();
-
-        tracing::debug!(
-            "[GeminiLogProvider] {} new messages since offset {}",
-            new_entries.len(),
-            since_offset
-        );
-
-        // Find last assistant message in new entries
-        // Gemini uses "gemini" as the role/type for assistant messages
-        let result = new_entries
-            .into_iter()
-            .rfind(|(_, (role, _, _))| role == "assistant" || role == "model" || role == "gemini")
-            .map(|(idx, (_, content, timestamp))| LogEntry {
-                content,
-                offset: idx as u64 + 1, // Next message index
-                timestamp,
-                inode: self.get_inode(),
-            });
-
-        // Update current offset to total message count
-        if result.is_some() {
-            self.current_offset.store(total_messages, Ordering::SeqCst);
-            tracing::info!(
-                "[GeminiLogProvider] Found assistant reply, new offset={}",
-                total_messages
-            );
-            return result;
-        }
-
-        // Fallback: If we were using a locked session file and found no new messages,
-        // check if there's a newer session file that might have the response
+        // Fallback: check newer session file if we were using a locked session
         if should_check_newer {
             tracing::debug!(
                 "[GeminiLogProvider] No reply in locked session, checking for newer files"
             );
 
-            if let Some(latest_file) = self.find_latest_chat_file() {
-                // Check if this is a different file than the locked one
-                if latest_file != chat_file {
-                    tracing::info!(
-                        "[GeminiLogProvider] Found newer session file: {:?}, switching to it",
-                        latest_file
-                    );
-
-                    // Try to read from the newer file
-                    if let Ok(file) = File::open(&latest_file) {
-                        let mut reader = BufReader::new(file);
-                        let mut content = String::new();
-                        if reader.read_to_string(&mut content).is_ok() {
-                            let entries = self.parse_chat_json(&content);
-                            let total_messages = entries.len() as u64;
-
-                            tracing::debug!(
-                                "[GeminiLogProvider] Parsed {} messages from newer file",
-                                total_messages
-                            );
-
-                            // Look for assistant messages in the newer file
-                            // Start from offset 0 since this is a new file
-                            let result = entries
-                                .into_iter()
-                                .enumerate()
-                                .rfind(|(_, (role, _, _))| {
-                                    role == "assistant" || role == "model" || role == "gemini"
-                                })
-                                .map(|(idx, (_, content, timestamp))| LogEntry {
-                                    content,
-                                    offset: idx as u64 + 1,
-                                    timestamp,
-                                    inode: self.get_inode(),
-                                });
-
-                            if result.is_some() {
-                                self.current_offset.store(total_messages, Ordering::SeqCst);
-                                tracing::info!(
-                                    "[GeminiLogProvider] Found assistant reply in newer file, offset={}",
-                                    total_messages
-                                );
-                                return result;
-                            }
-                        }
-                    }
-                }
+            if let Some((result, total_messages)) = self.scan_newer_session(
+                &chat_file,
+                since_offset,
+                baseline_timestamp,
+                default_timestamp,
+            ) {
+                self.current_offset.store(total_messages, Ordering::SeqCst);
+                tracing::info!(
+                    "[GeminiLogProvider] Found assistant reply in newer file, offset={}",
+                    total_messages
+                );
+                return Some(result);
             }
         }
 
@@ -379,10 +463,21 @@ impl LogProvider for GeminiLogProvider {
     async fn lock_session(&self) -> Option<LockedSession> {
         let chat_file = self.find_latest_chat_file()?;
         let content = fs::read_to_string(&chat_file).ok()?;
-        let baseline_offset = self.parse_chat_json(&content).len() as u64;
+        let entries = self.parse_chat_json(&content);
+        let baseline_offset = entries.len() as u64;
+        let default_timestamp = Self::default_timestamp();
+        let baseline_timestamp = entries
+            .iter()
+            .rev()
+            .map(|(_, _, ts)| *ts)
+            .find(|ts| *ts != default_timestamp)
+            .unwrap_or(default_timestamp);
 
         // Store locked session
-        *self.locked_session.lock().await = Some(chat_file.clone());
+        *self.locked_session.lock().await = Some(LockedGeminiSession {
+            path: chat_file.clone(),
+            baseline_timestamp,
+        });
 
         tracing::info!(
             "[GeminiLogProvider] Session locked: {:?}, baseline_offset={}",
