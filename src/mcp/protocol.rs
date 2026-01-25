@@ -240,14 +240,14 @@ mod tests {
             protocol_version: "2024-11-05".to_string(),
             capabilities: ServerCapabilities { tools: None },
             server_info: ServerInfo {
-                name: "ccgo".to_string(),
+                name: "ccgonext".to_string(),
                 version: "0.1.0".to_string(),
             },
         };
 
         let serialized = serde_json::to_value(&result).unwrap();
         assert_eq!(serialized["protocolVersion"], "2024-11-05");
-        assert_eq!(serialized["serverInfo"]["name"], "ccgo");
+        assert_eq!(serialized["serverInfo"]["name"], "ccgonext");
     }
 
     #[test]

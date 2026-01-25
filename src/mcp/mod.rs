@@ -323,7 +323,7 @@ impl McpServer {
                 tools: Some(ToolsCapability { list_changed: true }),
             },
             server_info: ServerInfo {
-                name: "ccgo".to_string(),
+                name: "ccgonext".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
         };

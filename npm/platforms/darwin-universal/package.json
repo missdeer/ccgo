@@ -1,0 +1,17 @@
+{
+  "name": "@ccgonext/darwin-universal",
+  "version": "0.1.0",
+  "description": "Platform-specific binary for ccgo (macOS Universal)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/missdeer/ccgo.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64", "arm64"],
+  "files": ["bin/ccgo"],
+  "preferUnplugged": true,
+  "publishConfig": {
+    "access": "public"
+  }
+}

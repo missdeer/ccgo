@@ -2,9 +2,9 @@
 
 set -e
 
-REPO="missdeer/ccgo"
-INSTALL_DIR="/opt/ccgo"
-BINARY_NAME="ccgo"
+REPO="missdeer/ccgonext"
+INSTALL_DIR="/opt/ccgonext"
+BINARY_NAME="ccgonext"
 
 # Function to detect platform and architecture
 detect_platform() {
@@ -60,12 +60,12 @@ get_latest_version() {
 # Function to download and install binary from GitHub Release
 download_from_github() {
 	local version=$1
-	local asset_name="ccgo_${PLATFORM}_${ASSET_ARCH}.${EXTENSION}"
+	local asset_name="ccgonext_${PLATFORM}_${ASSET_ARCH}.${EXTENSION}"
 	local download_url="https://github.com/${REPO}/releases/download/v${version}/${asset_name}"
 	local temp_dir=$(mktemp -d)
 	local archive_path="${temp_dir}/${asset_name}"
 
-	echo "Downloading ccgo v${version} from GitHub Release..."
+	echo "Downloading ccgonext v${version} from GitHub Release..."
 	echo "URL: ${download_url}"
 
 	# Download the archive
@@ -106,40 +106,40 @@ download_from_github() {
 	echo "${INSTALL_DIR}/${BINARY_NAME}"
 }
 
-# check the first argument is the path to the ccgo binary
+# check the first argument is the path to the ccgonext binary
 if [ -n "$1" ]; then
-	CCGO_PATH="$1"
+	CCGONEXT_PATH="$1"
 fi
 
-if [ -z "$CCGO_PATH" ]; then
-	# Get the absolute path of the ccgo binary
-	# if current os is Darwin, use $(pwd)/ccgo
+if [ -z "$CCGONEXT_PATH" ]; then
+	# Get the absolute path of the ccgonext binary
+	# if current os is Darwin, use $(pwd)/ccgonext
 	if [ "$(uname)" == "Darwin" ]; then
-		CCGO_PATH=$(pwd)/ccgo
+		CCGONEXT_PATH=$(pwd)/ccgonext
 	fi
-	if [ ! -f "$CCGO_PATH" ]; then
-		CCGO_PATH=$(pwd)/target/release/ccgo
-		if [ ! -f "$CCGO_PATH" ]; then
+	if [ ! -f "$CCGONEXT_PATH" ]; then
+		CCGONEXT_PATH=$(pwd)/target/release/ccgonext
+		if [ ! -f "$CCGONEXT_PATH" ]; then
 			# Check if binary exists in /opt directory
 			if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
-				CCGO_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+				CCGONEXT_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 			else
 				# Download from GitHub Release
-				echo "ccgo binary not found locally, downloading from GitHub Release..."
+				echo "ccgonext binary not found locally, downloading from GitHub Release..."
 				detect_platform
 				VERSION=$(get_latest_version) || exit 1
-				CCGO_PATH=$(download_from_github "$VERSION") || exit 1
+				CCGONEXT_PATH=$(download_from_github "$VERSION") || exit 1
 			fi
 		fi
 	fi
 fi
 
-# Add the ccgo server to the Claude Code MCP registry
+# Add the ccgonext server to the Claude Code MCP registry
 CLAUDE_PATH=$(which claude)
 if [ -f "$CLAUDE_PATH" ]; then
-	"$CLAUDE_PATH" mcp add-json ccgo -s user '{"type":"stdio","command":"'"$CCGO_PATH"'","args":["serve"],"env":{}}'
-	echo "ccgo MCP server registered with Claude Code"
-	echo "You can now use ccgo to orchestrate Codex, Gemini, and OpenCode from Claude Code"
+	"$CLAUDE_PATH" mcp add-json ccgonext -s user '{"type":"stdio","command":"'"$CCGONEXT_PATH"'","args":["serve"],"env":{}}'
+	echo "ccgonext MCP server registered with Claude Code"
+	echo "You can now use ccgonext to orchestrate Codex, Gemini, and OpenCode from Claude Code"
 else
 	echo "Error: claude not found"
 	echo "Please install Claude Code first: https://claude.ai/code"

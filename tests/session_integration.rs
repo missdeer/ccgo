@@ -4,11 +4,11 @@
 //! ClaudeCode PTY-based reply detection.
 
 use async_trait::async_trait;
-use ccgo::agent::{ClaudeCodeAgent, GenericAgent};
-use ccgo::config::{AgentConfig, TimeoutConfig};
-use ccgo::log_provider::{HistoryEntry, LockedSession, LogEntry, LogProvider};
-use ccgo::pty::PtyManager;
-use ccgo::session::AgentSession;
+use ccgonext::agent::{ClaudeCodeAgent, GenericAgent};
+use ccgonext::config::{AgentConfig, TimeoutConfig};
+use ccgonext::log_provider::{HistoryEntry, LockedSession, LogEntry, LogProvider};
+use ccgonext::pty::PtyManager;
+use ccgonext::session::AgentSession;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -82,7 +82,7 @@ async fn test_claudecode_pty_reply_detection() {
 
     // Verify state transitions from Starting to Idle (or remains Starting if claude not found)
     let state = session_arc.get_state().await;
-    if matches!(state, ccgo::state::AgentState::Idle) {
+    if matches!(state, ccgonext::state::AgentState::Idle) {
         // Send a request
         let request_future = session_arc.ask(
             "test message".to_string(),

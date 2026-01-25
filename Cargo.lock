@@ -283,7 +283,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ccgo"
+name = "ccgonext"
 version = "0.1.0"
 dependencies = [
  "anyhow",

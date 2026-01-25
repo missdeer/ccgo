@@ -1,4 +1,4 @@
-//! Configuration module for ccgo
+//! Configuration module for ccgonext
 
 use std::collections::HashMap;
 
@@ -69,8 +69,8 @@ impl Default for Config {
                     r"(?i)^fatal".to_string(),
                 ],
                 supports_cwd: false,
-                sentinel_template: "# CCGO_MSG_ID:{id}\n{message}".to_string(),
-                sentinel_regex: r"(?i)#\s*CCGO_MSG_ID:\s*([0-9a-f-]{36})".to_string(),
+                sentinel_template: "# CCGONEXT_MSG_ID:{id}\n{message}".to_string(),
+                sentinel_regex: r"(?i)#\s*CCGONEXT_MSG_ID:\s*([0-9a-f-]{36})".to_string(),
             },
         );
 

@@ -1,0 +1,17 @@
+{
+  "name": "@ccgonext/linux-x64",
+  "version": "0.1.0",
+  "description": "Platform-specific binary for ccgo (Linux x64)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/missdeer/ccgo.git"
+  },
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["bin/ccgo"],
+  "preferUnplugged": true,
+  "publishConfig": {
+    "access": "public"
+  }
+}

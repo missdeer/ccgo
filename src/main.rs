@@ -1,6 +1,6 @@
-//! CCGO CLI - ClaudeCode-Codex-Gemini-OpenCode MCP Server
+//! CCGONEXT CLI - ClaudeCode-Codex-Gemini-OpenCode Next MCP Server
 
-use ccgo::{
+use ccgonext::{
     agent,
     config::{AgentConfig, Config, ServerConfig, TimeoutConfig, WebConfig},
     log_provider,
@@ -15,72 +15,72 @@ use std::sync::Arc;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser)]
-#[command(name = "ccgo")]
+#[command(name = "ccgonext")]
 #[command(author = "Claude Code Bridge Team")]
 #[command(version)]
-#[command(about = "ClaudeCode-Codex-Gemini-OpenCode MCP Server", long_about = None)]
+#[command(about = "ClaudeCode-Codex-Gemini-OpenCode Next MCP Server", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Web server port [env: CCGO_PORT]
-    #[arg(short, long, default_value = "8765", env = "CCGO_PORT")]
+    /// Web server port [env: CCGONEXT_PORT]
+    #[arg(short, long, default_value = "8765", env = "CCGONEXT_PORT")]
     port: u16,
 
-    /// Web server host [env: CCGO_HOST]
-    #[arg(long, default_value = "127.0.0.1", env = "CCGO_HOST")]
+    /// Web server host [env: CCGONEXT_HOST]
+    #[arg(long, default_value = "127.0.0.1", env = "CCGONEXT_HOST")]
     host: String,
 
-    /// Enable web terminal input [env: CCGO_INPUT_ENABLED]
-    #[arg(long, env = "CCGO_INPUT_ENABLED")]
+    /// Enable web terminal input [env: CCGONEXT_INPUT_ENABLED]
+    #[arg(long, env = "CCGONEXT_INPUT_ENABLED")]
     input_enabled: bool,
 
-    /// Auth token for web API [env: CCGO_AUTH_TOKEN]
-    #[arg(long, env = "CCGO_AUTH_TOKEN")]
+    /// Auth token for web API [env: CCGONEXT_AUTH_TOKEN]
+    #[arg(long, env = "CCGONEXT_AUTH_TOKEN")]
     auth_token: Option<String>,
 
-    /// Output buffer size in bytes [env: CCGO_BUFFER_SIZE]
-    #[arg(long, default_value = "10485760", env = "CCGO_BUFFER_SIZE")]
+    /// Output buffer size in bytes [env: CCGONEXT_BUFFER_SIZE]
+    #[arg(long, default_value = "10485760", env = "CCGONEXT_BUFFER_SIZE")]
     buffer_size: usize,
 
-    /// Default request timeout in seconds [env: CCGO_TIMEOUT]
-    #[arg(long, default_value = "600", env = "CCGO_TIMEOUT")]
+    /// Default request timeout in seconds [env: CCGONEXT_TIMEOUT]
+    #[arg(long, default_value = "600", env = "CCGONEXT_TIMEOUT")]
     timeout: u64,
 
-    /// Codex command [env: CCGO_CODEX_CMD]
-    #[arg(long, default_value = "codex", env = "CCGO_CODEX_CMD")]
+    /// Codex command [env: CCGONEXT_CODEX_CMD]
+    #[arg(long, default_value = "codex", env = "CCGONEXT_CODEX_CMD")]
     codex_cmd: String,
 
-    /// Gemini command [env: CCGO_GEMINI_CMD]
-    #[arg(long, default_value = "gemini", env = "CCGO_GEMINI_CMD")]
+    /// Gemini command [env: CCGONEXT_GEMINI_CMD]
+    #[arg(long, default_value = "gemini", env = "CCGONEXT_GEMINI_CMD")]
     gemini_cmd: String,
 
-    /// OpenCode command [env: CCGO_OPENCODE_CMD]
-    #[arg(long, default_value = "opencode", env = "CCGO_OPENCODE_CMD")]
+    /// OpenCode command [env: CCGONEXT_OPENCODE_CMD]
+    #[arg(long, default_value = "opencode", env = "CCGONEXT_OPENCODE_CMD")]
     opencode_cmd: String,
 
-    /// ClaudeCode command [env: CCGO_CLAUDECODE_CMD]
-    #[arg(long, default_value = "claude", env = "CCGO_CLAUDECODE_CMD")]
+    /// ClaudeCode command [env: CCGONEXT_CLAUDECODE_CMD]
+    #[arg(long, default_value = "claude", env = "CCGONEXT_CLAUDECODE_CMD")]
     claudecode_cmd: String,
 
-    /// Agents to enable (comma-separated: codex,gemini,opencode,claudecode) [env: CCGO_AGENTS]
-    #[arg(long, default_value = "codex,gemini,opencode", env = "CCGO_AGENTS")]
+    /// Agents to enable (comma-separated: codex,gemini,opencode,claudecode) [env: CCGONEXT_AGENTS]
+    #[arg(long, default_value = "codex,gemini,opencode", env = "CCGONEXT_AGENTS")]
     agents: String,
 
-    /// Maximum number of retries when agent fails to start [env: CCGO_MAX_START_RETRIES]
-    #[arg(long, default_value = "3", env = "CCGO_MAX_START_RETRIES")]
+    /// Maximum number of retries when agent fails to start [env: CCGONEXT_MAX_START_RETRIES]
+    #[arg(long, default_value = "3", env = "CCGONEXT_MAX_START_RETRIES")]
     max_start_retries: u32,
 
-    /// Base delay in milliseconds for exponential backoff between retries [env: CCGO_START_RETRY_DELAY]
-    #[arg(long, default_value = "1000", env = "CCGO_START_RETRY_DELAY")]
+    /// Base delay in milliseconds for exponential backoff between retries [env: CCGONEXT_START_RETRY_DELAY]
+    #[arg(long, default_value = "1000", env = "CCGONEXT_START_RETRY_DELAY")]
     start_retry_delay: u64,
 
-    /// Log file path (optional, if not set logs only go to stderr) [env: CCGO_LOG_FILE]
-    #[arg(long, env = "CCGO_LOG_FILE")]
+    /// Log file path (optional, if not set logs only go to stderr) [env: CCGONEXT_LOG_FILE]
+    #[arg(long, env = "CCGONEXT_LOG_FILE")]
     log_file: Option<String>,
 
-    /// Log directory for rotating logs [env: CCGO_LOG_DIR]
-    #[arg(long, env = "CCGO_LOG_DIR")]
+    /// Log directory for rotating logs [env: CCGONEXT_LOG_DIR]
+    #[arg(long, env = "CCGONEXT_LOG_DIR")]
     log_dir: Option<String>,
 }
 
@@ -119,14 +119,14 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn init_tracing(cli: &Cli) {
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| "ccgo=debug,tower_http=debug".into());
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "ccgonext=debug,tower_http=debug".into());
 
     let stderr_layer = fmt::layer().with_target(false).with_writer(std::io::stderr);
 
     if let Some(log_dir) = &cli.log_dir {
         // Rotating file appender (daily rotation)
-        let file_appender = tracing_appender::rolling::daily(log_dir, "ccgo.log");
+        let file_appender = tracing_appender::rolling::daily(log_dir, "ccgonext.log");
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
         let file_layer = fmt::layer()
@@ -236,8 +236,8 @@ fn build_config(cli: &Cli) -> Config {
                     r"(?i)^fatal".to_string(),
                 ],
                 supports_cwd: false,
-                sentinel_template: "# CCGO_MSG_ID:{id}\n{message}".to_string(),
-                sentinel_regex: r"(?i)#\s*CCGO_MSG_ID:\s*([0-9a-f-]{36})".to_string(),
+                sentinel_template: "# CCGONEXT_MSG_ID:{id}\n{message}".to_string(),
+                sentinel_regex: r"(?i)#\s*CCGONEXT_MSG_ID:\s*([0-9a-f-]{36})".to_string(),
             },
         );
     }
@@ -383,7 +383,7 @@ async fn create_session_manager(config: &Config) -> anyhow::Result<Arc<SessionMa
 }
 
 fn show_config(config: &Config) {
-    println!("CCGO Configuration");
+    println!("CCGONEXT Configuration");
     println!("==================");
     println!();
     println!("Server:");

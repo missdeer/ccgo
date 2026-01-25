@@ -1,8 +1,8 @@
-# CCGO - Claude Code 多 AI 协作网关
+# CCGONEXT - Claude Code 多 AI 协作网关 (Next)
 
 [English](README.md)
 
-CCGO 是一个 MCP (Model Context Protocol) 服务器，使 Claude Code 能够通过统一接口编排多个 AI 编程助手（Codex、Gemini、OpenCode）。
+CCGONEXT 是一个 MCP (Model Context Protocol) 服务器，使 Claude Code 能够通过统一接口编排多个 AI 编程助手（Codex、Gemini、OpenCode）。
 
 ## 功能特性
 
@@ -20,9 +20,9 @@ CCGO 是一个 MCP (Model Context Protocol) 服务器，使 Claude Code 能够�
 ### 从源码编译
 
 ```bash
-cd ccgo
+cd ccgonext
 cargo build --release
-# 二进制文件位于 target/release/ccgo (Windows 为 ccgo.exe)
+# 二进制文件位于 target/release/ccgonext (Windows 为 ccgonext.exe)
 ```
 
 ### 预编译二进制
@@ -38,8 +38,8 @@ cargo build --release
 ```json
 {
   "mcpServers": {
-    "ccgo": {
-      "command": "ccgo",
+    "ccgonext": {
+      "command": "ccgonext",
       "args": ["serve"]
     }
   }
@@ -50,7 +50,7 @@ cargo build --release
 
 ```bash
 # 仅启动 Web 服务器
-ccgo web
+ccgonext web
 
 # 浏览器打开 http://localhost:8765
 ```
@@ -58,7 +58,7 @@ ccgo web
 ## 使用方法
 
 ```
-ccgo [选项] [命令]
+ccgonext [选项] [命令]
 
 命令:
   serve   作为 MCP 服务器运行（stdio 模式）并启动 Web UI [默认]
@@ -66,24 +66,24 @@ ccgo [选项] [命令]
   config  显示当前配置
 
 选项:
-  -p, --port <端口>           Web 服务器端口 [环境变量: CCGO_PORT] [默认: 8765]
-      --host <地址>           Web 服务器地址 [环境变量: CCGO_HOST] [默认: 127.0.0.1]
-      --input-enabled         启用 Web 终端输入 [环境变量: CCGO_INPUT_ENABLED]
-      --auth-token <TOKEN>    Web API 认证令牌 [环境变量: CCGO_AUTH_TOKEN]
-      --buffer-size <大小>    输出缓冲区大小（字节）[环境变量: CCGO_BUFFER_SIZE] [默认: 10485760]
-      --timeout <秒>          默认请求超时 [环境变量: CCGO_TIMEOUT] [默认: 600]
-      --codex-cmd <命令>      Codex 启动命令 [环境变量: CCGO_CODEX_CMD] [默认: codex]
-      --gemini-cmd <命令>     Gemini 启动命令 [环境变量: CCGO_GEMINI_CMD] [默认: gemini]
-      --opencode-cmd <命令>   OpenCode 启动命令 [环境变量: CCGO_OPENCODE_CMD] [默认: opencode]
-      --claudecode-cmd <命令> ClaudeCode 启动命令 [环境变量: CCGO_CLAUDECODE_CMD] [默认: claude]
-      --agents <列表>         启用的 Agent（逗号分隔: codex,gemini,opencode,claudecode）[环境变量: CCGO_AGENTS] [默认: codex,gemini,opencode]
+  -p, --port <端口>           Web 服务器端口 [环境变量: CCGONEXT_PORT] [默认: 8765]
+      --host <地址>           Web 服务器地址 [环境变量: CCGONEXT_HOST] [默认: 127.0.0.1]
+      --input-enabled         启用 Web 终端输入 [环境变量: CCGONEXT_INPUT_ENABLED]
+      --auth-token <TOKEN>    Web API 认证令牌 [环境变量: CCGONEXT_AUTH_TOKEN]
+      --buffer-size <大小>    输出缓冲区大小（字节）[环境变量: CCGONEXT_BUFFER_SIZE] [默认: 10485760]
+      --timeout <秒>          默认请求超时 [环境变量: CCGONEXT_TIMEOUT] [默认: 600]
+      --codex-cmd <命令>      Codex 启动命令 [环境变量: CCGONEXT_CODEX_CMD] [默认: codex]
+      --gemini-cmd <命令>     Gemini 启动命令 [环境变量: CCGONEXT_GEMINI_CMD] [默认: gemini]
+      --opencode-cmd <命令>   OpenCode 启动命令 [环境变量: CCGONEXT_OPENCODE_CMD] [默认: opencode]
+      --claudecode-cmd <命令> ClaudeCode 启动命令 [环境变量: CCGONEXT_CLAUDECODE_CMD] [默认: claude]
+      --agents <列表>         启用的 Agent（逗号分隔: codex,gemini,opencode,claudecode）[环境变量: CCGONEXT_AGENTS] [默认: codex,gemini,opencode]
   -h, --help                  显示帮助
   -V, --version               显示版本
 ```
 
 ## MCP 工具
 
-CCGO 提供一个 MCP 工具：
+CCGONEXT 提供一个 MCP 工具：
 
 ### `ask_agents`
 
@@ -139,12 +139,12 @@ CCGO 提供一个 MCP 工具：
 所有命令行选项都可以通过环境变量设置：
 
 ```bash
-export CCGO_PORT=9000
-export CCGO_HOST=0.0.0.0
-export CCGO_INPUT_ENABLED=true
-export CCGO_AUTH_TOKEN=your-secret-token
-export CCGO_AGENTS=codex,gemini
-ccgo
+export CCGONEXT_PORT=9000
+export CCGONEXT_HOST=0.0.0.0
+export CCGONEXT_INPUT_ENABLED=true
+export CCGONEXT_AUTH_TOKEN=your-secret-token
+export CCGONEXT_AGENTS=codex,gemini
+ccgonext
 ```
 
 ## WSL2 网络访问
@@ -153,7 +153,7 @@ ccgo
 
 ```bash
 # 绑定到所有接口
-ccgo --host 0.0.0.0
+ccgonext --host 0.0.0.0
 
 # 从 Windows 通过 WSL2 IP 访问
 # 获取 WSL2 IP: ip addr show eth0 | grep "inet "
@@ -174,7 +174,7 @@ netsh interface portproxy add v4tov4 listenport=8765 listenaddress=0.0.0.0 conne
 └────────────────────────────────────────────────────────│────┘
                                                          │
 ┌────────────────────────────────────────────────────────│────┐
-│ CCGO MCP 服务器                                        │    │
+│ CCGONEXT MCP 服务器                                        │    │
 │   ┌──────────────┐    ┌─────────────────────────────┐  │    │
 │   │ MCP 处理器   │◄───│ stdio (JSON-RPC)            │◄─┘    │
 │   └──────┬───────┘    └─────────────────────────────┘       │

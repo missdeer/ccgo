@@ -72,7 +72,7 @@ impl ClaudeCodeAgent {
                 r"(?i)^failed".to_string(),
                 r"(?i)^fatal".to_string(),
             ],
-            sentinel_regex: Regex::new(r"(?i)#\s*CCGO_MSG_ID:\s*([0-9a-f-]{36})")
+            sentinel_regex: Regex::new(r"(?i)#\s*CCGONEXT_MSG_ID:\s*([0-9a-f-]{36})")
                 .expect("valid sentinel regex"),
             response_timeout: Duration::from_secs(120),
             idle_timeout: Duration::from_secs(5),
@@ -240,8 +240,8 @@ impl Agent for ClaudeCodeAgent {
 
     fn inject_message_sentinel(&self, message: &str, message_id: &str) -> String {
         // Use comment format to avoid ClaudeCode interpreting it
-        // Format: # CCGO_MSG_ID:<uuid>\n<message>
-        format!("# CCGO_MSG_ID:{}\n{}", message_id, message)
+        // Format: # CCGONEXT_MSG_ID:<uuid>\n<message>
+        format!("# CCGONEXT_MSG_ID:{}\n{}", message_id, message)
     }
 
     fn extract_sentinel_id(&self, output: &str) -> Option<String> {
@@ -283,7 +283,7 @@ mod tests {
         let message_id = "12345678-1234-1234-1234-123456789abc";
 
         let injected = agent.inject_message_sentinel(message, message_id);
-        assert!(injected.starts_with("# CCGO_MSG_ID:"));
+        assert!(injected.starts_with("# CCGONEXT_MSG_ID:"));
         assert!(injected.contains(message_id));
         assert!(injected.contains(message));
     }
@@ -293,12 +293,12 @@ mod tests {
         let agent = ClaudeCodeAgent::new();
         let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
-        let output = format!("# CCGO_MSG_ID: {}\nSome response", message_id);
+        let output = format!("# CCGONEXT_MSG_ID: {}\nSome response", message_id);
         let extracted = agent.extract_sentinel_id(&output);
         assert_eq!(extracted, Some(message_id.to_string()));
 
         // Test case insensitive
-        let output_upper = format!("# ccgo_msg_id: {}\nResponse", message_id);
+        let output_upper = format!("# ccgonext_msg_id: {}\nResponse", message_id);
         let extracted_upper = agent.extract_sentinel_id(&output_upper);
         assert_eq!(extracted_upper, Some(message_id.to_string()));
 

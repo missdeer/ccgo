@@ -1,0 +1,17 @@
+{
+  "name": "@ccgonext/win32-arm64",
+  "version": "0.1.0",
+  "description": "Platform-specific binary for ccgo (Windows ARM64)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/missdeer/ccgo.git"
+  },
+  "os": ["win32"],
+  "cpu": ["arm64"],
+  "files": ["bin/ccgo.exe"],
+  "preferUnplugged": true,
+  "publishConfig": {
+    "access": "public"
+  }
+}

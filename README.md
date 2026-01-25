@@ -1,8 +1,8 @@
-# CCGO - Claude Code Gateway for Multi-AI Orchestration
+# CCGONEXT - Claude Code Gateway for Multi-AI Orchestration (Next)
 
 [中文文档](README_zh.md)
 
-CCGO is an MCP (Model Context Protocol) server that enables Claude Code to orchestrate multiple AI coding assistants (Codex, Gemini, OpenCode) through a unified interface.
+CCGONEXT is an MCP (Model Context Protocol) server that enables Claude Code to orchestrate multiple AI coding assistants (Codex, Gemini, OpenCode) through a unified interface.
 
 ## Features
 
@@ -20,14 +20,14 @@ CCGO is an MCP (Model Context Protocol) server that enables Claude Code to orche
 ### From Source
 
 ```bash
-cd ccgo
+cd ccgonext
 cargo build --release
-# Binary at target/release/ccgo (or ccgo.exe on Windows)
+# Binary at target/release/ccgonext (or ccgonext.exe on Windows)
 ```
 
 ### Pre-built Binaries
 
-Download from [Releases](https://github.com/missdeer/ccgo/releases).
+Download from [Releases](https://github.com/missdeer/ccgonext/releases).
 
 ## Quick Start
 
@@ -38,8 +38,8 @@ Add to your Claude Code MCP configuration:
 ```json
 {
   "mcpServers": {
-    "ccgo": {
-      "command": "ccgo",
+    "ccgonext": {
+      "command": "ccgonext",
       "args": ["serve"]
     }
   }
@@ -50,7 +50,7 @@ Add to your Claude Code MCP configuration:
 
 ```bash
 # Start web server only
-ccgo web
+ccgonext web
 
 # Open browser to http://localhost:8765
 ```
@@ -58,7 +58,7 @@ ccgo web
 ## Usage
 
 ```
-ccgo [OPTIONS] [COMMAND]
+ccgonext [OPTIONS] [COMMAND]
 
 Commands:
   serve   Run as MCP server (stdio mode) with web UI [default]
@@ -66,24 +66,24 @@ Commands:
   config  Show current configuration
 
 Options:
-  -p, --port <PORT>           Web server port [env: CCGO_PORT] [default: 8765]
-      --host <HOST>           Web server host [env: CCGO_HOST] [default: 127.0.0.1]
-      --input-enabled         Enable web terminal input [env: CCGO_INPUT_ENABLED]
-      --auth-token <TOKEN>    Auth token for web API [env: CCGO_AUTH_TOKEN]
-      --buffer-size <SIZE>    Output buffer size in bytes [env: CCGO_BUFFER_SIZE] [default: 10485760]
-      --timeout <SECONDS>     Default request timeout [env: CCGO_TIMEOUT] [default: 600]
-      --codex-cmd <CMD>       Codex command [env: CCGO_CODEX_CMD] [default: codex]
-      --gemini-cmd <CMD>      Gemini command [env: CCGO_GEMINI_CMD] [default: gemini]
-      --opencode-cmd <CMD>    OpenCode command [env: CCGO_OPENCODE_CMD] [default: opencode]
-      --claudecode-cmd <CMD>  ClaudeCode command [env: CCGO_CLAUDECODE_CMD] [default: claude]
-      --agents <LIST>         Agents to enable (comma-separated: codex,gemini,opencode,claudecode) [env: CCGO_AGENTS] [default: codex,gemini,opencode]
+  -p, --port <PORT>           Web server port [env: CCGONEXT_PORT] [default: 8765]
+      --host <HOST>           Web server host [env: CCGONEXT_HOST] [default: 127.0.0.1]
+      --input-enabled         Enable web terminal input [env: CCGONEXT_INPUT_ENABLED]
+      --auth-token <TOKEN>    Auth token for web API [env: CCGONEXT_AUTH_TOKEN]
+      --buffer-size <SIZE>    Output buffer size in bytes [env: CCGONEXT_BUFFER_SIZE] [default: 10485760]
+      --timeout <SECONDS>     Default request timeout [env: CCGONEXT_TIMEOUT] [default: 600]
+      --codex-cmd <CMD>       Codex command [env: CCGONEXT_CODEX_CMD] [default: codex]
+      --gemini-cmd <CMD>      Gemini command [env: CCGONEXT_GEMINI_CMD] [default: gemini]
+      --opencode-cmd <CMD>    OpenCode command [env: CCGONEXT_OPENCODE_CMD] [default: opencode]
+      --claudecode-cmd <CMD>  ClaudeCode command [env: CCGONEXT_CLAUDECODE_CMD] [default: claude]
+      --agents <LIST>         Agents to enable (comma-separated: codex,gemini,opencode,claudecode) [env: CCGONEXT_AGENTS] [default: codex,gemini,opencode]
   -h, --help                  Print help
   -V, --version               Print version
 ```
 
 ## MCP Tools
 
-CCGO exposes a single MCP tool:
+CCGONEXT exposes a single MCP tool:
 
 ### `ask_agents`
 
@@ -139,12 +139,12 @@ Access the web interface at `http://localhost:8765`:
 All CLI options can be set via environment variables:
 
 ```bash
-export CCGO_PORT=9000
-export CCGO_HOST=0.0.0.0
-export CCGO_INPUT_ENABLED=true
-export CCGO_AUTH_TOKEN=your-secret-token
-export CCGO_AGENTS=codex,gemini
-ccgo
+export CCGONEXT_PORT=9000
+export CCGONEXT_HOST=0.0.0.0
+export CCGONEXT_INPUT_ENABLED=true
+export CCGONEXT_AUTH_TOKEN=your-secret-token
+export CCGONEXT_AGENTS=codex,gemini
+ccgonext
 ```
 
 ## WSL2 Network Access
@@ -153,7 +153,7 @@ When running in WSL2, to access the web UI from Windows:
 
 ```bash
 # Bind to all interfaces
-ccgo --host 0.0.0.0
+ccgonext --host 0.0.0.0
 
 # Access via WSL2 IP from Windows
 # Get WSL2 IP: ip addr show eth0 | grep "inet "
@@ -174,7 +174,7 @@ netsh interface portproxy add v4tov4 listenport=8765 listenaddress=0.0.0.0 conne
 └────────────────────────────────────────────────────────│────┘
                                                          │
 ┌────────────────────────────────────────────────────────│────┐
-│ CCGO MCP Server                                        │    │
+│ CCGONEXT MCP Server                                        │    │
 │   ┌──────────────┐    ┌─────────────────────────────┐  │    │
 │   │ MCP Handler  │◄───│ stdio (JSON-RPC)            │◄─┘    │
 │   └──────┬───────┘    └─────────────────────────────┘       │

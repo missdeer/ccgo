@@ -25,36 +25,36 @@ jobs:
           # Linux x86_64
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            artifact_name: ccgo
-            asset_name: ccgo_Linux_x86_64.tar.gz
+            artifact_name: ccgonext
+            asset_name: ccgonext_Linux_x86_64.tar.gz
             universal: false
             cross: false
           # Linux aarch64
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
-            artifact_name: ccgo
-            asset_name: ccgo_Linux_aarch64.tar.gz
+            artifact_name: ccgonext
+            asset_name: ccgonext_Linux_aarch64.tar.gz
             universal: false
             cross: true
           # macOS universal (x86_64 + aarch64)
           - target: universal-apple-darwin
             os: macos-latest
-            artifact_name: ccgo
-            asset_name: ccgo_Darwin_universal.tar.gz
+            artifact_name: ccgonext
+            asset_name: ccgonext_Darwin_universal.tar.gz
             universal: true
             cross: false
           # Windows x86_64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: ccgo.exe
-            asset_name: ccgo_Windows_x86_64.zip
+            artifact_name: ccgonext.exe
+            asset_name: ccgonext_Windows_x86_64.zip
             universal: false
             cross: false
           # Windows aarch64
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-            artifact_name: ccgo.exe
-            asset_name: ccgo_Windows_aarch64.zip
+            artifact_name: ccgonext.exe
+            asset_name: ccgonext_Windows_aarch64.zip
             universal: false
             cross: false
 
@@ -172,9 +172,9 @@ jobs:
       - name: Verify release assets are available
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          for asset in "ccgo_Linux_x86_64.tar.gz" "ccgo_Linux_aarch64.tar.gz" "ccgo_Darwin_universal.tar.gz" "ccgo_Windows_x86_64.zip" "ccgo_Windows_aarch64.zip"; do
+          for asset in "ccgonext_Linux_x86_64.tar.gz" "ccgonext_Linux_aarch64.tar.gz" "ccgonext_Darwin_universal.tar.gz" "ccgonext_Windows_x86_64.zip" "ccgonext_Windows_aarch64.zip"; do
             echo "Checking $asset..."
-            curl -sf -o /dev/null "https://github.com/missdeer/ccgo/releases/download/v${VERSION}/${asset}" || {
+            curl -sf -o /dev/null "https://github.com/missdeer/ccgonext/releases/download/v${VERSION}/${asset}" || {
               echo "Asset $asset not available yet"
               exit 1
             }
