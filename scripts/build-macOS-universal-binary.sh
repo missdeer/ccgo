@@ -13,4 +13,4 @@ fi
 
 env RUSTFLAGS="-C target-cpu=native" cargo build --release
 cargo build --release --target $TARGET
-lipo -create -output ccgo target/$TARGET/release/ccgo target/release/ccgo
+lipo -create -output ccgonext target/$TARGET/release/ccgonext target/release/ccgonext
