@@ -12,7 +12,11 @@ pub use websocket::*;
 
 use crate::config::Config;
 use crate::session::SessionManager;
-use axum::{middleware, routing::{get, post}, Router};
+use axum::{
+    middleware,
+    routing::{get, post},
+    Router,
+};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
