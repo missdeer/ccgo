@@ -1,15 +1,15 @@
 {
   "name": "@ccgonext/linux-arm64",
   "version": "0.1.0",
-  "description": "Platform-specific binary for ccgo (Linux ARM64)",
+  "description": "Platform-specific binary for ccgonext (Linux ARM64)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/missdeer/ccgo.git"
+    "url": "git+https://github.com/missdeer/ccgonext.git"
   },
   "os": ["linux"],
   "cpu": ["arm64"],
-  "files": ["bin/ccgo"],
+  "files": ["bin/ccgonext"],
   "preferUnplugged": true,
   "publishConfig": {
     "access": "public"

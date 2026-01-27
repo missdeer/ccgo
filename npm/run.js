@@ -25,7 +25,7 @@ function getBinaryPath() {
 
   try {
     const pkgPath = require.resolve(`${pkgName}/package.json`);
-    const binName = process.platform === "win32" ? "ccgo.exe" : "ccgo";
+    const binName = process.platform === "win32" ? "ccgonext.exe" : "ccgonext";
     return path.join(path.dirname(pkgPath), "bin", binName);
   } catch (e) {
     console.error(`Failed to find platform package: ${pkgName}`);
@@ -59,7 +59,7 @@ function run() {
   });
 
   child.on("error", (error) => {
-    console.error(`Failed to start ccgo: ${error.message}`);
+    console.error(`Failed to start ccgonext: ${error.message}`);
     process.exit(1);
   });
 

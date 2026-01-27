@@ -12,13 +12,13 @@ npm install -g ccgonext
 
 ```bash
 # Run as MCP server (default)
-ccgo serve
+ccgonext serve
 
 # Run web server only
-ccgo web
+ccgonext web
 
 # Show configuration
-ccgo config
+ccgonext config
 ```
 
 ## Supported Platforms
@@ -31,4 +31,4 @@ ccgo config
 
 ## License
 
-MIT - see [LICENSE](https://github.com/missdeer/ccgo/blob/master/LICENSE) for details.
+MIT - see [LICENSE](https://github.com/missdeer/ccgonext/blob/master/LICENSE) for details.

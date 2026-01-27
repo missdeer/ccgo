@@ -1,15 +1,15 @@
 {
   "name": "@ccgonext/win32-x64",
   "version": "0.1.0",
-  "description": "Platform-specific binary for ccgo (Windows x64)",
+  "description": "Platform-specific binary for ccgonext (Windows x64)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/missdeer/ccgo.git"
+    "url": "git+https://github.com/missdeer/ccgonext.git"
   },
   "os": ["win32"],
   "cpu": ["x64"],
-  "files": ["bin/ccgo.exe"],
+  "files": ["bin/ccgonext.exe"],
   "preferUnplugged": true,
   "publishConfig": {
     "access": "public"

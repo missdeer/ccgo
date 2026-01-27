@@ -7,14 +7,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/missdeer/ccgo.git"
+    "url": "git+https://github.com/missdeer/ccgonext.git"
   },
   "author": "missdeer",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/missdeer/ccgo/issues"
+    "url": "https://github.com/missdeer/ccgonext/issues"
   },
-  "homepage": "https://github.com/missdeer/ccgo#readme",
+  "homepage": "https://github.com/missdeer/ccgonext#readme",
   "keywords": [
     "mcp",
     "ai",
@@ -25,7 +25,7 @@
     "cli"
   ],
   "bin": {
-    "ccgo": "run.js"
+    "ccgonext": "run.js"
   },
   "files": [
     "run.js",
