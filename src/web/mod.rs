@@ -21,19 +21,10 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct WebServerRunOptions {
     pub port_retry: u16,
     pub open_browser: bool,
-}
-
-impl Default for WebServerRunOptions {
-    fn default() -> Self {
-        Self {
-            port_retry: 0,
-            open_browser: false,
-        }
-    }
 }
 
 pub struct WebServer {
