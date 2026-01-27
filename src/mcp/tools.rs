@@ -249,13 +249,6 @@ async fn ask_single_agent(
         .await
         .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_name))?;
 
-    // For Gemini: strip leading '!' to prevent shell mode activation
-    let message = if agent_name == "gemini" && message.starts_with('!') {
-        &message[1..]
-    } else {
-        message
-    };
-
     let pty_manager = session_manager.pty_manager();
     let response = session
         .ask(message.to_string(), timeout, pty_manager)
@@ -466,37 +459,5 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("codex"));
         assert!(json.contains("gemini"));
-    }
-
-    #[test]
-    fn test_gemini_strip_leading_exclamation() {
-        // Test that leading '!' is stripped for gemini
-        let message = "!hello world";
-        let agent_name = "gemini";
-        let result = if agent_name == "gemini" && message.starts_with('!') {
-            &message[1..]
-        } else {
-            message
-        };
-        assert_eq!(result, "hello world");
-
-        // Test that non-gemini agents keep the '!'
-        let agent_name = "codex";
-        let result = if agent_name == "gemini" && message.starts_with('!') {
-            &message[1..]
-        } else {
-            message
-        };
-        assert_eq!(result, "!hello world");
-
-        // Test that messages without '!' are unchanged for gemini
-        let message = "hello world";
-        let agent_name = "gemini";
-        let result = if agent_name == "gemini" && message.starts_with('!') {
-            &message[1..]
-        } else {
-            message
-        };
-        assert_eq!(result, "hello world");
     }
 }
