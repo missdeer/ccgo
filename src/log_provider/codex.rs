@@ -213,6 +213,21 @@ impl CodexLogProvider {
         }
         Some((role, content, timestamp))
     }
+
+    fn check_done_marker(content: &str) -> bool {
+        let done_regex = regex::Regex::new(r"(?m)CCGO_DONE:\s*([a-f0-9-]+)").ok();
+        if let Some(re) = done_regex {
+            // Filter empty lines first, then check last 3 non-empty lines
+            content
+                .lines()
+                .rev()
+                .filter(|l| !l.trim().is_empty())
+                .take(3)
+                .any(|l| re.is_match(l))
+        } else {
+            false
+        }
+    }
 }
 
 #[async_trait]
@@ -283,10 +298,11 @@ impl LogProvider for CodexLogProvider {
 
                         if role == "assistant" {
                             last_assistant_entry = Some(LogEntry {
-                                content,
+                                content: content.clone(),
                                 offset: end_pos, // Use end position to avoid re-reading
                                 timestamp,
                                 inode: self.get_inode(),
+                                done_seen: Self::check_done_marker(&content),
                             });
                             last_end_offset = end_pos;
                         }

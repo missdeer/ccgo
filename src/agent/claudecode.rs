@@ -51,6 +51,8 @@ pub struct ClaudeCodeAgent {
     ready_regex: Regex,
     error_patterns: Vec<String>,
     sentinel_regex: Regex,
+    done_regex: Regex,
+    done_pattern: String,
     response_timeout: Duration,
     idle_timeout: Duration,
     ansi_regex: Regex,
@@ -74,6 +76,8 @@ impl ClaudeCodeAgent {
             ],
             sentinel_regex: Regex::new(r"(?i)#\s*CCGONEXT_MSG_ID:\s*([0-9a-f-]{36})")
                 .expect("valid sentinel regex"),
+            done_regex: Regex::new(r"(?m)CCGO_DONE:\s*([a-f0-9-]+)").expect("valid done regex"),
+            done_pattern: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
             response_timeout: Duration::from_secs(120),
             idle_timeout: Duration::from_secs(5),
             ansi_regex: Regex::new(r"\x1b\[[0-9;?]*[A-Za-z]").expect("valid ANSI regex"),
@@ -240,14 +244,70 @@ impl Agent for ClaudeCodeAgent {
 
     fn inject_message_sentinel(&self, message: &str, message_id: &str) -> String {
         // Use comment format to avoid ClaudeCode interpreting it
-        // Format: # CCGONEXT_MSG_ID:<uuid>\n<message>
-        format!("# CCGONEXT_MSG_ID:{}\n{}", message_id, message)
+        // Format: # CCGONEXT_MSG_ID:<uuid>\n<message>\n\nIMPORTANT: End with done marker
+        let done_marker = format!("CCGO_DONE: {}", message_id);
+        format!(
+            "# CCGONEXT_MSG_ID:{}\n{}\n\n\
+            IMPORTANT:\n\
+            - Reply normally, in English.\n\
+            - End your reply with this exact final line (verbatim, on its own line):\n\
+            {}",
+            message_id, message, done_marker
+        )
     }
 
     fn extract_sentinel_id(&self, output: &str) -> Option<String> {
         self.sentinel_regex
             .captures(output)
             .map(|c| c[1].to_string())
+    }
+
+    fn get_done_regex(&self) -> &str {
+        &self.done_pattern
+    }
+
+    fn is_reply_complete(&self, text: &str, message_id: &str) -> bool {
+        // Use the done_regex with message_id substitution
+        let pattern_str = self
+            .done_pattern
+            .replace("{id}", &regex::escape(message_id));
+        let re = match Regex::new(&pattern_str) {
+            Ok(r) => r,
+            Err(_) => return self.done_regex.is_match(text),
+        };
+        text.lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| re.is_match(l))
+            .unwrap_or(false)
+    }
+
+    fn strip_done_marker(&self, text: &str, message_id: &str) -> String {
+        let pattern = self
+            .done_pattern
+            .replace("{id}", &regex::escape(message_id));
+        let re = match Regex::new(&pattern) {
+            Ok(r) => r,
+            Err(_) => return text.to_string(),
+        };
+
+        let lines: Vec<&str> = text.lines().collect();
+        let mut result_lines: Vec<&str> = Vec::new();
+        let mut found_marker = false;
+
+        for line in lines.iter().rev() {
+            if !found_marker && line.trim().is_empty() {
+                continue;
+            }
+            if !found_marker && re.is_match(line) {
+                found_marker = true;
+                continue;
+            }
+            result_lines.push(line);
+        }
+
+        result_lines.reverse();
+        result_lines.join("\n").trim_end().to_string()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

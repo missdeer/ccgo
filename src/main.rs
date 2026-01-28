@@ -216,6 +216,8 @@ fn build_config(cli: &Cli) -> Config {
                 supports_cwd: false,
                 sentinel_template: "# MSG_ID:{id}\n{message}".to_string(),
                 sentinel_regex: r"# MSG_ID:([a-f0-9-]+)".to_string(),
+                done_template: "CCGO_DONE: {id}".to_string(),
+                done_regex: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
             },
         );
     }
@@ -232,6 +234,8 @@ fn build_config(cli: &Cli) -> Config {
                 supports_cwd: false,
                 sentinel_template: "[MSG_ID:{id}]\n{message}".to_string(),
                 sentinel_regex: r"\[MSG_ID:([a-f0-9-]+)\]".to_string(),
+                done_template: "CCGO_DONE: {id}".to_string(),
+                done_regex: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
             },
         );
     }
@@ -248,6 +252,8 @@ fn build_config(cli: &Cli) -> Config {
                 supports_cwd: false,
                 sentinel_template: "[[MSG:{id}]]\n{message}".to_string(),
                 sentinel_regex: r"\[\[MSG:([a-f0-9-]+)\]\]".to_string(),
+                done_template: "CCGO_DONE: {id}".to_string(),
+                done_regex: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
             },
         );
     }
@@ -268,6 +274,8 @@ fn build_config(cli: &Cli) -> Config {
                 supports_cwd: false,
                 sentinel_template: "# CCGONEXT_MSG_ID:{id}\n{message}".to_string(),
                 sentinel_regex: r"(?i)#\s*CCGONEXT_MSG_ID:\s*([0-9a-f-]{36})".to_string(),
+                done_template: "CCGO_DONE: {id}".to_string(),
+                done_regex: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
             },
         );
     }

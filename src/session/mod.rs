@@ -769,11 +769,12 @@ impl AgentSession {
 
     fn spawn_reply_detection(
         session: Arc<Self>,
-        _message_id: String,
+        message_id: String,
         baseline_offset: u64,
         timeout: Duration,
     ) {
         let log_provider = session.log_provider.clone();
+        let adapter = session.adapter.clone();
         let name = session.name.clone();
 
         tracing::info!(
@@ -811,9 +812,15 @@ impl AgentSession {
                     name,
                     entry.content.len()
                 );
-                let entry =
-                    Self::wait_for_stable_reply(&log_provider, baseline_offset, entry, deadline)
-                        .await;
+                let entry = Self::wait_for_stable_reply(
+                    &log_provider,
+                    &adapter,
+                    &message_id,
+                    baseline_offset,
+                    entry,
+                    deadline,
+                )
+                .await;
                 Self::deliver_reply(&session, entry).await;
                 return;
             }
@@ -863,6 +870,8 @@ impl AgentSession {
                                     drop(sub.handle); // Cancel watcher
                                     let entry = Self::wait_for_stable_reply(
                                         &log_provider,
+                                        &adapter,
+                                        &message_id,
                                         baseline_offset,
                                         entry,
                                         deadline,
@@ -894,6 +903,8 @@ impl AgentSession {
                                     drop(sub.handle);
                                     let entry = Self::wait_for_stable_reply(
                                         &log_provider,
+                                        &adapter,
+                                        &message_id,
                                         baseline_offset,
                                         entry,
                                         deadline,
@@ -921,6 +932,8 @@ impl AgentSession {
                                     drop(sub.handle);
                                     let entry = Self::wait_for_stable_reply(
                                         &log_provider,
+                                        &adapter,
+                                        &message_id,
                                         baseline_offset,
                                         entry,
                                         deadline,
@@ -964,6 +977,8 @@ impl AgentSession {
                     );
                     let entry = Self::wait_for_stable_reply(
                         &log_provider,
+                        &adapter,
+                        &message_id,
                         baseline_offset,
                         entry,
                         deadline,
@@ -986,10 +1001,21 @@ impl AgentSession {
 
     async fn wait_for_stable_reply(
         log_provider: &Arc<dyn LogProvider>,
+        adapter: &Arc<dyn Agent>,
+        message_id: &str,
         baseline_offset: u64,
         mut entry: crate::log_provider::LogEntry,
         deadline: Instant,
     ) -> crate::log_provider::LogEntry {
+        // If done marker was detected, validate message-ID before returning immediately
+        if entry.done_seen && adapter.is_reply_complete(&entry.content, message_id) {
+            tracing::debug!(
+                "[StableReply] Done marker with valid message-ID detected, returning immediately with {} bytes",
+                entry.content.len()
+            );
+            return entry;
+        }
+
         // Some CLIs (notably Gemini) update a single log entry incrementally while streaming.
         // Returning immediately can capture only the first chunk.
         //
@@ -1039,6 +1065,15 @@ impl AgentSession {
                 }
                 continue;
             };
+
+            // If done marker is now seen, validate message-ID before returning
+            if next.done_seen && adapter.is_reply_complete(&next.content, message_id) {
+                tracing::debug!(
+                    "[StableReply] Done marker with valid message-ID detected during polling, returning with {} bytes",
+                    next.content.len()
+                );
+                return next;
+            }
 
             // Compare content: length first (fast), then full content if lengths match
             let content_changed = next.content.len() != last_content_len
@@ -1120,6 +1155,7 @@ impl AgentSession {
                         content: response,
                         timestamp: chrono::Utc::now(),
                         inode: None,
+                        done_seen: true, // ClaudeCode uses PTY parsing, assume complete
                     };
                     Self::deliver_reply(&session, entry).await;
                 }
@@ -1144,7 +1180,13 @@ impl AgentSession {
         {
             let mut current_req = session.current_request.lock().await;
             if let Some(req) = current_req.take() {
-                let _ = req.response_tx.send(Ok(entry.content.clone()));
+                // Strip done marker from content before sending to client
+                let content = if entry.done_seen {
+                    session.adapter.strip_done_marker(&entry.content, &req.id)
+                } else {
+                    entry.content.clone()
+                };
+                let _ = req.response_tx.send(Ok(content));
             }
         }
 

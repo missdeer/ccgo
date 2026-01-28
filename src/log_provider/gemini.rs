@@ -308,6 +308,21 @@ impl GeminiLogProvider {
         role == "assistant" || role == "model" || role == "gemini"
     }
 
+    fn check_done_marker(content: &str) -> bool {
+        let done_regex = regex::Regex::new(r"(?m)CCGO_DONE:\s*([a-f0-9-]+)").ok();
+        if let Some(re) = done_regex {
+            // Filter empty lines first, then check last 3 non-empty lines
+            content
+                .lines()
+                .rev()
+                .filter(|l| !l.trim().is_empty())
+                .take(3)
+                .any(|l| re.is_match(l))
+        } else {
+            false
+        }
+    }
+
     fn read_file_to_string(path: &PathBuf) -> std::io::Result<String> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
@@ -405,11 +420,15 @@ impl GeminiLogProvider {
             .rfind(|(_, (role, content, _))| {
                 Self::is_assistant_role(role) && !content.trim().is_empty()
             })
-            .map(|(local_idx, (_, content, timestamp))| LogEntry {
-                content: content.clone(),
-                offset: (start + local_idx) as u64 + 1,
-                timestamp: *timestamp,
-                inode: self.get_inode(),
+            .map(|(local_idx, (_, content, timestamp))| {
+                let done_seen = Self::check_done_marker(content);
+                LogEntry {
+                    content: content.clone(),
+                    offset: (start + local_idx) as u64 + 1,
+                    timestamp: *timestamp,
+                    inode: self.get_inode(),
+                    done_seen,
+                }
             })
     }
 
@@ -426,11 +445,15 @@ impl GeminiLogProvider {
                     && *timestamp > baseline_timestamp
                     && !content.trim().is_empty()
             })
-            .map(|(idx, (_, content, timestamp))| LogEntry {
-                content: content.clone(),
-                offset: idx as u64 + 1,
-                timestamp: *timestamp,
-                inode: self.get_inode(),
+            .map(|(idx, (_, content, timestamp))| {
+                let done_seen = Self::check_done_marker(content);
+                LogEntry {
+                    content: content.clone(),
+                    offset: idx as u64 + 1,
+                    timestamp: *timestamp,
+                    inode: self.get_inode(),
+                    done_seen,
+                }
             })
     }
 

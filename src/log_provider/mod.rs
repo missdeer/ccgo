@@ -108,6 +108,7 @@ pub struct LogEntry {
     pub offset: u64,
     pub timestamp: DateTime<Utc>,
     pub inode: Option<u64>,
+    pub done_seen: bool,
 }
 
 #[derive(Debug, Clone)]

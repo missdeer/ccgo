@@ -378,6 +378,21 @@ impl OpenCodeLogProvider {
 
         entries
     }
+
+    fn check_done_marker(content: &str) -> bool {
+        let done_regex = regex::Regex::new(r"(?m)CCGO_DONE:\s*([a-f0-9-]+)").ok();
+        if let Some(re) = done_regex {
+            // Filter empty lines first, then check last 3 non-empty lines
+            content
+                .lines()
+                .rev()
+                .filter(|l| !l.trim().is_empty())
+                .take(3)
+                .any(|l| re.is_match(l))
+        } else {
+            false
+        }
+    }
 }
 
 #[async_trait]
@@ -451,6 +466,7 @@ impl LogProvider for OpenCodeLogProvider {
                                     offset: total,
                                     timestamp: *timestamp,
                                     inode: self.get_inode(),
+                                    done_seen: Self::check_done_marker(content),
                                 });
                             }
                         }
@@ -462,11 +478,15 @@ impl LogProvider for OpenCodeLogProvider {
         let result = new_entries
             .into_iter()
             .last()
-            .map(|(idx, (_, content, timestamp))| LogEntry {
-                content,
-                offset: idx as u64 + 1,
-                timestamp,
-                inode: self.get_inode(),
+            .map(|(idx, (_, content, timestamp))| {
+                let done_seen = Self::check_done_marker(&content);
+                LogEntry {
+                    content,
+                    offset: idx as u64 + 1,
+                    timestamp,
+                    inode: self.get_inode(),
+                    done_seen,
+                }
             });
 
         if result.is_some() {

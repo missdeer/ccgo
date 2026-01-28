@@ -30,6 +30,12 @@ pub trait Agent: Send + Sync {
 
     fn extract_sentinel_id(&self, output: &str) -> Option<String>;
 
+    fn get_done_regex(&self) -> &str;
+
+    fn is_reply_complete(&self, text: &str, message_id: &str) -> bool;
+
+    fn strip_done_marker(&self, text: &str, message_id: &str) -> String;
+
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -42,6 +48,8 @@ pub struct GenericAgent {
     supports_cwd: bool,
     sentinel_template: String,
     sentinel_regex: String,
+    done_template: String,
+    done_regex: String,
 }
 
 impl GenericAgent {
@@ -55,6 +63,8 @@ impl GenericAgent {
             supports_cwd: config.supports_cwd,
             sentinel_template: config.sentinel_template.clone(),
             sentinel_regex: config.sentinel_regex.clone(),
+            done_template: config.done_template.clone(),
+            done_regex: config.done_regex.clone(),
         }
     }
 }
@@ -84,14 +94,69 @@ impl Agent for GenericAgent {
     }
 
     fn inject_message_sentinel(&self, message: &str, message_id: &str) -> String {
-        self.sentinel_template
+        let prefix = self
+            .sentinel_template
             .replace("{id}", message_id)
-            .replace("{message}", message)
+            .replace("{message}", message);
+
+        let done_marker = self.done_template.replace("{id}", message_id);
+
+        format!(
+            "{}\n\n\
+            IMPORTANT:\n\
+            - Reply normally, in English.\n\
+            - End your reply with this exact final line (verbatim, on its own line):\n\
+            {}",
+            prefix, done_marker
+        )
     }
 
     fn extract_sentinel_id(&self, output: &str) -> Option<String> {
         let pattern = regex::Regex::new(&self.sentinel_regex).ok()?;
         pattern.captures(output).map(|c| c[1].to_string())
+    }
+
+    fn get_done_regex(&self) -> &str {
+        &self.done_regex
+    }
+
+    fn is_reply_complete(&self, text: &str, message_id: &str) -> bool {
+        let pattern = self.done_regex.replace("{id}", &regex::escape(message_id));
+        let re = match regex::Regex::new(&pattern) {
+            Ok(r) => r,
+            Err(_) => return false,
+        };
+        text.lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| re.is_match(l))
+            .unwrap_or(false)
+    }
+
+    fn strip_done_marker(&self, text: &str, message_id: &str) -> String {
+        let pattern = self.done_regex.replace("{id}", &regex::escape(message_id));
+        let re = match regex::Regex::new(&pattern) {
+            Ok(r) => r,
+            Err(_) => return text.to_string(),
+        };
+
+        let lines: Vec<&str> = text.lines().collect();
+        let mut result_lines: Vec<&str> = Vec::new();
+        let mut found_marker = false;
+
+        for line in lines.iter().rev() {
+            if !found_marker && line.trim().is_empty() {
+                continue;
+            }
+            if !found_marker && re.is_match(line) {
+                found_marker = true;
+                continue;
+            }
+            result_lines.push(line);
+        }
+
+        result_lines.reverse();
+        result_lines.join("\n").trim_end().to_string()
     }
 
     fn as_any(&self) -> &dyn Any {
