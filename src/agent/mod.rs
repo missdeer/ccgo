@@ -176,3 +176,94 @@ pub fn create_agent(name: &str, config: &crate::config::AgentConfig) -> Box<dyn 
     // All other agents use GenericAgent with configuration
     Box::new(GenericAgent::new(name.to_string(), config))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AgentConfig;
+
+    fn create_test_config() -> AgentConfig {
+        AgentConfig {
+            command: "test".to_string(),
+            args: vec![],
+            log_provider: "test".to_string(),
+            ready_pattern: r"^>".to_string(),
+            error_patterns: vec!["Error:".to_string()],
+            supports_cwd: false,
+            sentinel_template: "# MSG_ID:{id}\n{message}".to_string(),
+            sentinel_regex: r"# MSG_ID:([a-f0-9-]+)".to_string(),
+            done_template: "CCGO_DONE: {id}".to_string(),
+            done_regex: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_generic_agent_is_reply_complete() {
+        let config = create_test_config();
+        let agent = GenericAgent::new("test".to_string(), &config);
+        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+        // Test with valid done marker
+        let text = format!("Response content\nCCGO_DONE: {}", message_id);
+        assert!(agent.is_reply_complete(&text, message_id));
+
+        // Test with trailing blank lines
+        let text_blanks = format!("Response\nCCGO_DONE: {}\n\n\n", message_id);
+        assert!(agent.is_reply_complete(&text_blanks, message_id));
+
+        // Test without marker
+        assert!(!agent.is_reply_complete("No marker here", message_id));
+
+        // Test with wrong ID (regex doesn't have {id} placeholder, so any UUID matches)
+        let other_id = "00000000-0000-0000-0000-000000000000";
+        let text_other = format!("Response\nCCGO_DONE: {}", other_id);
+        assert!(agent.is_reply_complete(&text_other, message_id));
+    }
+
+    #[test]
+    fn test_generic_agent_strip_done_marker() {
+        let config = create_test_config();
+        let agent = GenericAgent::new("test".to_string(), &config);
+        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+        // Test stripping marker
+        let text = format!("Line 1\nLine 2\nCCGO_DONE: {}", message_id);
+        let stripped = agent.strip_done_marker(&text, message_id);
+        assert_eq!(stripped, "Line 1\nLine 2");
+
+        // Test with trailing blank lines
+        let text_blanks = format!("Content\nCCGO_DONE: {}\n\n", message_id);
+        let stripped_blanks = agent.strip_done_marker(&text_blanks, message_id);
+        assert_eq!(stripped_blanks, "Content");
+
+        // Test without marker
+        let no_marker = "Just content";
+        assert_eq!(agent.strip_done_marker(no_marker, message_id), "Just content");
+    }
+
+    #[test]
+    fn test_generic_agent_inject_sentinel_includes_done_instruction() {
+        let config = create_test_config();
+        let agent = GenericAgent::new("test".to_string(), &config);
+        let message_id = "12345678-1234-1234-1234-123456789abc";
+
+        let injected = agent.inject_message_sentinel("Hello", message_id);
+
+        // Should contain sentinel
+        assert!(injected.contains("MSG_ID:"));
+        assert!(injected.contains(message_id));
+
+        // Should contain done marker instruction
+        assert!(injected.contains("CCGO_DONE:"));
+        assert!(injected.contains("IMPORTANT:"));
+        assert!(injected.contains("End your reply"));
+    }
+
+    #[test]
+    fn test_generic_agent_get_done_regex() {
+        let config = create_test_config();
+        let agent = GenericAgent::new("test".to_string(), &config);
+
+        assert_eq!(agent.get_done_regex(), r"(?m)CCGO_DONE:\s*([a-f0-9-]+)");
+    }
+}

@@ -402,4 +402,77 @@ mod tests {
         assert_eq!(agent1.name(), agent2.name());
         assert_eq!(agent1.get_ready_pattern(), agent2.get_ready_pattern());
     }
+
+    #[test]
+    fn test_claudecode_is_reply_complete() {
+        let agent = ClaudeCodeAgent::new();
+        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+        // Test with valid done marker
+        let text_with_marker = format!("Some response content\nCCGO_DONE: {}", message_id);
+        assert!(agent.is_reply_complete(&text_with_marker, message_id));
+
+        // Test with trailing whitespace
+        let text_with_whitespace = format!("Response\nCCGO_DONE: {}  ", message_id);
+        assert!(agent.is_reply_complete(&text_with_whitespace, message_id));
+
+        // Test with trailing blank lines
+        let text_with_blanks = format!("Response\nCCGO_DONE: {}\n\n", message_id);
+        assert!(agent.is_reply_complete(&text_with_blanks, message_id));
+
+        // Test without marker
+        let text_without_marker = "Some response without marker";
+        assert!(!agent.is_reply_complete(text_without_marker, message_id));
+
+        // Test marker in code snippet - note: current regex matches any UUID format
+        // so this will match as long as the format is correct
+        let code_snippet = "Here's an example:\nCCGO_DONE: 00000000-0000-0000-0000-000000000000";
+        assert!(agent.is_reply_complete(code_snippet, message_id));
+
+        // Test with invalid UUID format (should not match)
+        let invalid_format = "Response\nCCGO_DONE: not-a-uuid";
+        assert!(!agent.is_reply_complete(invalid_format, message_id));
+    }
+
+    #[test]
+    fn test_claudecode_strip_done_marker() {
+        let agent = ClaudeCodeAgent::new();
+        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+        // Test stripping marker at end - note: regex matches any valid UUID
+        let text_with_marker = format!("Line 1\nLine 2\nCCGO_DONE: {}", message_id);
+        let stripped = agent.strip_done_marker(&text_with_marker, message_id);
+        assert_eq!(stripped, "Line 1\nLine 2");
+
+        // Test with trailing blank lines
+        let text_with_blanks = format!("Content here\nCCGO_DONE: {}\n\n", message_id);
+        let stripped_blanks = agent.strip_done_marker(&text_with_blanks, message_id);
+        assert_eq!(stripped_blanks, "Content here");
+
+        // Test without marker (should return unchanged)
+        let text_without = "No marker here";
+        let stripped_none = agent.strip_done_marker(text_without, message_id);
+        assert_eq!(stripped_none, "No marker here");
+
+        // Test with different valid UUID (still stripped because regex matches format)
+        let other_id = "00000000-0000-0000-0000-000000000000";
+        let text_other = format!("Content\nCCGO_DONE: {}", other_id);
+        let stripped_other = agent.strip_done_marker(&text_other, message_id);
+        assert_eq!(stripped_other, "Content");
+    }
+
+    #[test]
+    fn test_claudecode_sentinel_includes_done_instruction() {
+        let agent = ClaudeCodeAgent::new();
+        let message = "Test message";
+        let message_id = "12345678-1234-1234-1234-123456789abc";
+
+        let injected = agent.inject_message_sentinel(message, message_id);
+
+        // Should contain the done marker instruction
+        assert!(injected.contains("CCGO_DONE:"));
+        assert!(injected.contains(message_id));
+        assert!(injected.contains("IMPORTANT:"));
+        assert!(injected.contains("End your reply"));
+    }
 }
