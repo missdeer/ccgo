@@ -18,7 +18,13 @@ impl Default for Config {
             "codex".to_string(),
             AgentConfig {
                 command: "codex".to_string(),
-                args: vec![],
+                args: vec![
+                    "-a".to_string(),
+                    "never".to_string(),
+                    "-s".to_string(),
+                    "read-only".to_string(),
+                    "--skip-git-repo-check".to_string(),
+                ],
                 log_provider: "codex".to_string(),
                 ready_pattern: r"^(>|codex>)".to_string(),
                 error_patterns: vec!["Error:".to_string(), "Traceback".to_string()],
