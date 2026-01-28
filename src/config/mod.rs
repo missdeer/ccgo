@@ -34,7 +34,7 @@ impl Default for Config {
             "gemini".to_string(),
             AgentConfig {
                 command: "gemini".to_string(),
-                args: vec![],
+                args: vec!["--yolo".to_string()],
                 log_provider: "gemini".to_string(),
                 ready_pattern: r"(Gemini|>\s*$)".to_string(),
                 error_patterns: vec!["Error:".to_string(), "Failed".to_string()],
