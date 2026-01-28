@@ -238,7 +238,10 @@ mod tests {
 
         // Test without marker
         let no_marker = "Just content";
-        assert_eq!(agent.strip_done_marker(no_marker, message_id), "Just content");
+        assert_eq!(
+            agent.strip_done_marker(no_marker, message_id),
+            "Just content"
+        );
     }
 
     #[test]
