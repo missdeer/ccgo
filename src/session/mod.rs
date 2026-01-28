@@ -1019,27 +1019,30 @@ impl AgentSession {
         // Some CLIs (notably Gemini) update a single log entry incrementally while streaming.
         // Returning immediately can capture only the first chunk.
         //
-        // Reference: claude_code_bridge uses content hash (SHA256) to detect when reply stops changing.
-        // We use a simpler but effective approach: compare content length and content equality.
-        //
         // Strategy:
         // 1. Poll for new content every POLL_MS
         // 2. If content changed, reset the quiet timer
-        // 3. If content unchanged for QUIET_MS, consider reply complete
-        // 4. Use multiple confirmation rounds to avoid false positives from streaming pauses
+        // 3. If done marker with valid ID seen, return immediately (most reliable)
+        // 4. If content unchanged for QUIET_MS with MIN_STABLE_CHECKS, consider reply complete
+        //
+        // Use conservative thresholds to avoid truncation. Only relax when we've validated
+        // the done marker with the correct message_id (which triggers immediate return anyway).
         const POLL_MS: u64 = 200;
-        const QUIET_MS: u64 = 600; // Increased from 400ms for more reliability
-        const MIN_STABLE_CHECKS: u32 = 2; // Require multiple unchanged checks
+        const QUIET_MS: u64 = 2000; // 2 seconds quiet required
+        const MIN_STABLE_CHECKS: u32 = 5; // Require 5 unchanged checks
 
         let poll = Duration::from_millis(POLL_MS);
         let quiet = Duration::from_millis(QUIET_MS);
+
         let mut last_change = Instant::now();
         let mut stable_check_count: u32 = 0;
         let mut last_content_len = entry.content.len();
 
         tracing::debug!(
-            "[StableReply] Starting stability check, initial content len: {}",
-            last_content_len
+            "[StableReply] Starting stability check, initial content len: {}, quiet_ms: {}, min_checks: {}",
+            last_content_len,
+            quiet.as_millis(),
+            MIN_STABLE_CHECKS
         );
 
         while Instant::now() < deadline {
@@ -1047,8 +1050,9 @@ impl AgentSession {
 
             // Check if we've had enough stable checks after quiet period
             if time_since_change >= quiet && stable_check_count >= MIN_STABLE_CHECKS {
-                tracing::debug!(
-                    "[StableReply] Reply stable after {}ms quiet, {} checks, final len: {}",
+                tracing::warn!(
+                    "[StableReply] Returning via stability heuristic after {}ms quiet, {} checks, {} bytes. \
+                    Agent may not have output CCGO_DONE marker with correct ID.",
                     time_since_change.as_millis(),
                     stable_check_count,
                     entry.content.len()
@@ -1059,14 +1063,13 @@ impl AgentSession {
             tokio::time::sleep(poll).await;
 
             let Some(next) = log_provider.get_latest_reply(baseline_offset).await else {
-                // No reply found, increment stable count if we had content before
-                if last_content_len > 0 {
-                    stable_check_count += 1;
-                }
+                // No reply found - could be transient read/parse failure
+                // Don't treat as stability evidence, just continue polling
+                tracing::trace!("[StableReply] get_latest_reply returned None, continuing poll");
                 continue;
             };
 
-            // If done marker is now seen, validate message-ID before returning
+            // If done marker is now seen with valid message-ID, return immediately
             if next.done_seen && adapter.is_reply_complete(&next.content, message_id) {
                 tracing::debug!(
                     "[StableReply] Done marker with valid message-ID detected during polling, returning with {} bytes",

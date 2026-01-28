@@ -108,7 +108,53 @@ pub struct LogEntry {
     pub offset: u64,
     pub timestamp: DateTime<Utc>,
     pub inode: Option<u64>,
+    /// Hint that content might contain a done marker. Not authoritative -
+    /// actual validation is done by Agent::is_reply_complete().
     pub done_seen: bool,
+}
+
+/// Heuristic to detect if the reply *might* be complete.
+/// We only treat it as "marker seen" if the **last non-empty line** starts with `CCGO_DONE:`
+/// (ASCII-case-insensitive). Actual validation (correct message_id) is done by
+/// `Agent::is_reply_complete()`.
+pub fn might_have_done_marker(content: &str) -> bool {
+    const PREFIX: &[u8] = b"CCGO_DONE:";
+    let Some(last_non_empty) = content.lines().rev().find(|l| !l.trim().is_empty()) else {
+        return false;
+    };
+
+    let trimmed = last_non_empty.trim_start();
+    let bytes = trimmed.as_bytes();
+    bytes
+        .get(..PREFIX.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(PREFIX))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_might_have_done_marker_empty() {
+        assert!(!might_have_done_marker(""));
+        assert!(!might_have_done_marker("   \n\n"));
+    }
+
+    #[test]
+    fn test_might_have_done_marker_terminal_line() {
+        assert!(might_have_done_marker("Response\nCCGO_DONE: abc"));
+        assert!(might_have_done_marker("Response\n  ccgo_done: abc"));
+        assert!(might_have_done_marker("Response\nCcGo_DoNe: abc\n\n"));
+    }
+
+    #[test]
+    fn test_might_have_done_marker_not_terminal() {
+        // Marker NOT at end - should return false
+        assert!(!might_have_done_marker("CCGO_DONE: abc\nmore"));
+        assert!(!might_have_done_marker(
+            "Response\n```text\nCCGO_DONE: abc\n```\nMore"
+        ));
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +173,7 @@ pub struct LockedSession {
 
 #[async_trait]
 pub trait LogProvider: Send + Sync {
+    /// Get the latest assistant reply since the given offset.
     async fn get_latest_reply(&self, since_offset: u64) -> Option<LogEntry>;
 
     async fn get_history(&self, session_id: Option<&str>, count: usize) -> Vec<HistoryEntry>;

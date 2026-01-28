@@ -193,7 +193,7 @@ mod tests {
             sentinel_template: "# MSG_ID:{id}\n{message}".to_string(),
             sentinel_regex: r"# MSG_ID:([a-f0-9-]+)".to_string(),
             done_template: "CCGO_DONE: {id}".to_string(),
-            done_regex: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
+            done_regex: r"(?mi)^\s*CCGO_DONE:\s*{id}\s*$".to_string(),
         }
     }
 
@@ -214,10 +214,10 @@ mod tests {
         // Test without marker
         assert!(!agent.is_reply_complete("No marker here", message_id));
 
-        // Test with wrong ID (regex doesn't have {id} placeholder, so any UUID matches)
+        // Test with wrong ID - should NOT match
         let other_id = "00000000-0000-0000-0000-000000000000";
         let text_other = format!("Response\nCCGO_DONE: {}", other_id);
-        assert!(agent.is_reply_complete(&text_other, message_id));
+        assert!(!agent.is_reply_complete(&text_other, message_id));
     }
 
     #[test]
@@ -242,6 +242,11 @@ mod tests {
             agent.strip_done_marker(no_marker, message_id),
             "Just content"
         );
+
+        // Test with wrong ID - should NOT strip
+        let other_id = "00000000-0000-0000-0000-000000000000";
+        let text_other = format!("Content\nCCGO_DONE: {}", other_id);
+        assert_eq!(agent.strip_done_marker(&text_other, message_id), text_other);
     }
 
     #[test]
@@ -267,6 +272,6 @@ mod tests {
         let config = create_test_config();
         let agent = GenericAgent::new("test".to_string(), &config);
 
-        assert_eq!(agent.get_done_regex(), r"(?m)CCGO_DONE:\s*([a-f0-9-]+)");
+        assert_eq!(agent.get_done_regex(), r"(?mi)^\s*CCGO_DONE:\s*{id}\s*$");
     }
 }

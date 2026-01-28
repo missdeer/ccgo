@@ -308,21 +308,6 @@ impl GeminiLogProvider {
         role == "assistant" || role == "model" || role == "gemini"
     }
 
-    fn check_done_marker(content: &str) -> bool {
-        let done_regex = regex::Regex::new(r"(?m)CCGO_DONE:\s*([a-f0-9-]+)").ok();
-        if let Some(re) = done_regex {
-            // Filter empty lines first, then check last 3 non-empty lines
-            content
-                .lines()
-                .rev()
-                .filter(|l| !l.trim().is_empty())
-                .take(3)
-                .any(|l| re.is_match(l))
-        } else {
-            false
-        }
-    }
-
     fn read_file_to_string(path: &PathBuf) -> std::io::Result<String> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
@@ -421,7 +406,7 @@ impl GeminiLogProvider {
                 Self::is_assistant_role(role) && !content.trim().is_empty()
             })
             .map(|(local_idx, (_, content, timestamp))| {
-                let done_seen = Self::check_done_marker(content);
+                let done_seen = super::might_have_done_marker(content);
                 LogEntry {
                     content: content.clone(),
                     offset: (start + local_idx) as u64 + 1,
@@ -446,7 +431,7 @@ impl GeminiLogProvider {
                     && !content.trim().is_empty()
             })
             .map(|(idx, (_, content, timestamp))| {
-                let done_seen = Self::check_done_marker(content);
+                let done_seen = super::might_have_done_marker(content);
                 LogEntry {
                     content: content.clone(),
                     offset: idx as u64 + 1,
@@ -797,60 +782,5 @@ mod tests {
         let chosen = provider.find_latest_chat_file().unwrap();
 
         assert_eq!(chosen, project_session);
-    }
-
-    #[test]
-    fn test_check_done_marker_basic() {
-        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-
-        // Test with valid done marker at end
-        let content = format!("Response content\nCCGO_DONE: {}", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content));
-
-        // Test without marker
-        assert!(!GeminiLogProvider::check_done_marker("No marker here"));
-    }
-
-    #[test]
-    fn test_check_done_marker_filters_empty_lines() {
-        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-
-        // Test with trailing blank lines - should still find marker
-        let content = format!("Response\nCCGO_DONE: {}\n\n\n", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content));
-
-        // Test with many trailing blank lines
-        let content_many_blanks = format!("Response\nCCGO_DONE: {}\n\n\n\n\n", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content_many_blanks));
-    }
-
-    #[test]
-    fn test_check_done_marker_last_3_lines() {
-        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-
-        // Marker within last 3 non-empty lines
-        let content = format!("Line 1\nCCGO_DONE: {}\nLine after", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content));
-
-        // Marker followed by 2 non-empty lines (still within 3)
-        let content2 = format!("Start\nCCGO_DONE: {}\nLine 2\nLine 3", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content2));
-
-        // Marker too far from end (more than 3 non-empty lines after)
-        let content3 = format!("Start\nCCGO_DONE: {}\nA\nB\nC\nD", message_id);
-        assert!(!GeminiLogProvider::check_done_marker(&content3));
-    }
-
-    #[test]
-    fn test_check_done_marker_lenient_regex() {
-        let message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-
-        // With extra whitespace
-        let content = format!("Response\nCCGO_DONE:   {}  ", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content));
-
-        // With period after (lenient regex should match the ID part)
-        let content_period = format!("Response\nCCGO_DONE: {}.", message_id);
-        assert!(GeminiLogProvider::check_done_marker(&content_period));
     }
 }
