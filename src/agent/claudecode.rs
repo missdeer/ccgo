@@ -51,7 +51,6 @@ pub struct ClaudeCodeAgent {
     ready_regex: Regex,
     error_patterns: Vec<String>,
     sentinel_regex: Regex,
-    done_regex: Regex,
     done_pattern: String,
     response_timeout: Duration,
     idle_timeout: Duration,
@@ -76,8 +75,7 @@ impl ClaudeCodeAgent {
             ],
             sentinel_regex: Regex::new(r"(?i)#\s*CCGONEXT_MSG_ID:\s*([0-9a-f-]{36})")
                 .expect("valid sentinel regex"),
-            done_regex: Regex::new(r"(?m)CCGO_DONE:\s*([a-f0-9-]+)").expect("valid done regex"),
-            done_pattern: r"(?m)CCGO_DONE:\s*([a-f0-9-]+)".to_string(),
+            done_pattern: "CCGO_DONE: ".to_string(),
             response_timeout: Duration::from_secs(120),
             idle_timeout: Duration::from_secs(5),
             ansi_regex: Regex::new(r"\x1b\[[0-9;?]*[A-Za-z]").expect("valid ANSI regex"),
@@ -267,30 +265,15 @@ impl Agent for ClaudeCodeAgent {
     }
 
     fn is_reply_complete(&self, text: &str, message_id: &str) -> bool {
-        // Use the done_regex with message_id substitution
-        let pattern_str = self
-            .done_pattern
-            .replace("{id}", &regex::escape(message_id));
-        let re = match Regex::new(&pattern_str) {
-            Ok(r) => r,
-            Err(_) => return self.done_regex.is_match(text),
-        };
         text.lines()
             .rev()
             .find(|l| !l.trim().is_empty())
-            .map(|l| re.is_match(l))
+            .and_then(|l| l.trim().strip_prefix("CCGO_DONE:"))
+            .map(|remainder| remainder.trim().eq_ignore_ascii_case(message_id))
             .unwrap_or(false)
     }
 
     fn strip_done_marker(&self, text: &str, message_id: &str) -> String {
-        let pattern = self
-            .done_pattern
-            .replace("{id}", &regex::escape(message_id));
-        let re = match Regex::new(&pattern) {
-            Ok(r) => r,
-            Err(_) => return text.to_string(),
-        };
-
         let lines: Vec<&str> = text.lines().collect();
         let mut result_lines: Vec<&str> = Vec::new();
         let mut found_marker = false;
@@ -299,9 +282,13 @@ impl Agent for ClaudeCodeAgent {
             if !found_marker && line.trim().is_empty() {
                 continue;
             }
-            if !found_marker && re.is_match(line) {
-                found_marker = true;
-                continue;
+            if !found_marker {
+                if let Some(remainder) = line.trim().strip_prefix("CCGO_DONE:") {
+                    if remainder.trim().eq_ignore_ascii_case(message_id) {
+                        found_marker = true;
+                        continue;
+                    }
+                }
             }
             result_lines.push(line);
         }
@@ -424,14 +411,18 @@ mod tests {
         let text_without_marker = "Some response without marker";
         assert!(!agent.is_reply_complete(text_without_marker, message_id));
 
-        // Test marker in code snippet - note: current regex matches any UUID format
-        // so this will match as long as the format is correct
-        let code_snippet = "Here's an example:\nCCGO_DONE: 00000000-0000-0000-0000-000000000000";
-        assert!(agent.is_reply_complete(code_snippet, message_id));
+        // Test with different UUID - should NOT match (validates specific message_id)
+        let other_id = "00000000-0000-0000-0000-000000000000";
+        let code_snippet = format!("Here's an example:\nCCGO_DONE: {}", other_id);
+        assert!(!agent.is_reply_complete(&code_snippet, message_id));
 
         // Test with invalid UUID format (should not match)
         let invalid_format = "Response\nCCGO_DONE: not-a-uuid";
         assert!(!agent.is_reply_complete(invalid_format, message_id));
+
+        // Regression: trailing garbage after ID should NOT match
+        let trailing_garbage = format!("Response\nCCGO_DONE: {} trailing-garbage", message_id);
+        assert!(!agent.is_reply_complete(&trailing_garbage, message_id));
     }
 
     #[test]
@@ -454,11 +445,11 @@ mod tests {
         let stripped_none = agent.strip_done_marker(text_without, message_id);
         assert_eq!(stripped_none, "No marker here");
 
-        // Test with different valid UUID (still stripped because regex matches format)
+        // Test with different UUID - should NOT strip (validates specific message_id)
         let other_id = "00000000-0000-0000-0000-000000000000";
         let text_other = format!("Content\nCCGO_DONE: {}", other_id);
         let stripped_other = agent.strip_done_marker(&text_other, message_id);
-        assert_eq!(stripped_other, "Content");
+        assert_eq!(stripped_other, format!("Content\nCCGO_DONE: {}", other_id));
     }
 
     #[test]
