@@ -9,7 +9,7 @@
   },
   "os": ["linux"],
   "cpu": ["arm64"],
-  "files": ["bin/ccgonext"],
+  "files": ["bin/ccgonext", "LICENSE", "LICENSE-COMMERCIAL"],
   "preferUnplugged": true,
   "publishConfig": {
     "access": "public"

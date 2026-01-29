@@ -29,7 +29,9 @@
   },
   "files": [
     "run.js",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "LICENSE-COMMERCIAL"
   ],
   "engines": {
     "node": ">=14.14.0"
